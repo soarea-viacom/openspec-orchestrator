@@ -138,9 +138,20 @@ change_dir() {
 # stops a checker from re-reading the whole codebase — only follow a file
 # to confirm a seam or dependency claim.
 checker_inputs() {
-  local role="$1" slug="$2" name="$3"
+  local role="$1" slug="$2" name="$3" unit="${4:-}"
   local seam_line
   seam_line="$(printf 'input: seam list — state get --store %s --name %s, field seams\n' "$slug" "$name")"
+  if [ "$role" = unit-critic ]; then
+    [ -n "$unit" ] || { echo "checker_inputs unit-critic requires a unit" >&2; return 1; }
+    printf 'input: the proposal + delta spec\n'
+    printf 'input: unit %s files and task ids — state get --store %s --name %s, fields units/unit_tasks\n' "$unit" "$slug" "$name"
+    printf 'input: the unit diff from its base (git diff <base>..change/%s.%s)\n' "$name" "$unit"
+    printf 'input: the checks diff to its checks_commit (git diff <base>..<checks_commit>)\n'
+    printf 'input: its screenshots, as listed by units ready-for-review, opened with an image-capable read\n'
+    printf 'input: the prior unit critique, if any\n'
+    printf 'input: read other files only to confirm a seam is real or a dependency claim is true; never explore the codebase; never the generator'"'"'s transcript\n'
+    return 0
+  fi
   case "$role" in
     critic)
       printf 'input: the originating request\n'
@@ -152,7 +163,7 @@ checker_inputs() {
       printf '%s\n' "$seam_line"
       printf 'input: the branch diff\n'
       ;;
-    *) echo "unknown checker role '$role' (expected critic|verify)" >&2; return 1 ;;
+    *) echo "unknown checker role '$role' (expected critic|verify|unit-critic)" >&2; return 1 ;;
   esac
   printf 'input: the prior %s report, if any\n' "$role"
   printf 'input: read other files only to confirm a seam is real or a dependency claim is true; never explore the codebase; never the generator'"'"'s transcript\n'
@@ -164,7 +175,7 @@ concurrency_cap() {
   local cfg
   cfg="$(store_config "$1")"
   local n
-  n="$(awk '/^orchestration:/{f=1;next} f && /^[a-zA-Z]/{exit} f && /concurrency:/{print $2; exit}' "$cfg" 2>/dev/null || true)"
+  n="$(awk '/^orchestration:/{f=1;next} f && /^[a-zA-Z]/{exit} f && /^[[:space:]]+concurrency:/{print $2; exit}' "$cfg" 2>/dev/null || true)"
   echo "${n:-1}"
 }
 
@@ -173,10 +184,19 @@ gate_command() {
   local cfg
   cfg="$(store_config "$slug")"
   local key="gate_${mode}"
+  # A gate command is shell code, often containing double quotes of its own
+  # (e.g. "$PWD"), so its YAML value is written single-quoted; strip a
+  # matching pair of either quote style, never just the double-quote one.
   awk -v key="$key" '
     /^orchestration:/ { f=1; next }
     f && /^[a-zA-Z]/ { exit }
-    f && index($0, key":") { sub(".*"key":[ ]*", ""); gsub(/^"|"$/, ""); print; exit }
+    f && index($0, key":") {
+      sub(".*"key":[ ]*", "")
+      line = $0
+      if (line ~ /^".*"$/) { sub(/^"/, "", line); sub(/"$/, "", line) }
+      else if (line ~ /^'"'"'.*'"'"'$/) { sub(/^'"'"'/, "", line); sub(/'"'"'$/, "", line) }
+      print line; exit
+    }
   ' "$cfg" 2>/dev/null || true
 }
 
@@ -258,13 +278,367 @@ state_root() {
   echo "$(orchestration_dir "$1")/state"
 }
 
-# workspace_path <store-slug> <change-name> — where a change's worktree is
-# checked out. Under the store, not the project: the project's repo owns
-# the branch and history (git records the worktree in its .git/worktrees),
-# but its main checkout must never see orchestration files. The store is a
-# git repo too, so ensure_workspace_ignored keeps the checkout out of it.
+# workspace_path <store-slug> <change-name> [<unit>] — where a change's (or
+# a unit's) worktree is checked out. Under the store, not the project: the
+# project's repo owns the branch and history (git records the worktree in
+# its .git/worktrees), but its main checkout must never see orchestration
+# files. The store is a git repo too, so ensure_workspace_ignored keeps the
+# checkout out of it. The sole builder of workspace paths — a unit path is
+# always `<name>.<unit>` under the same workspaces/ dir, never built
+# ad hoc elsewhere.
 workspace_path() {
-  echo "$(orchestration_dir "$1")/workspaces/$2"
+  local slug="$1" name="$2" unit="${3:-}"
+  if [ -n "$unit" ]; then
+    echo "$(orchestration_dir "$slug")/workspaces/$name.$unit"
+  else
+    echo "$(orchestration_dir "$slug")/workspaces/$name"
+  fi
+}
+
+# unit_branch <change-name> <unit> -> change/<name>.<unit>. Not
+# change/<name>/<unit> — git stores change/<name> as a ref file, so a
+# sibling path under it would conflict with that file while the change
+# branch exists.
+unit_branch() {
+  echo "change/$1.$2"
+}
+
+# unit_rebase_in_progress <unit-worktree> -- true when a rebase-merge or
+# rebase-apply dir exists for that worktree. `git rev-parse --git-path`
+# prints a path relative to the worktree for the main checkout but an
+# absolute path for a linked worktree (its rebase state lives under the
+# main repo's .git/worktrees/<name>/), so both forms are handled here.
+unit_rebase_in_progress() {
+  local wt="$1" p state
+  for state in rebase-merge rebase-apply; do
+    p="$(git -C "$wt" rev-parse --git-path "$state" 2>/dev/null)" || continue
+    case "$p" in /*) ;; *) p="$wt/$p" ;; esac
+    [ -d "$p" ] && return 0
+  done
+  return 1
+}
+
+# unit_state_dir <store-slug> <change-name> -> directory of per-unit state
+# files (<state>/<name>.units/<unit>.yaml). Globbed as *.yaml only within
+# this directory, so cmd_status's top-level *.yaml glob never picks these up.
+unit_state_dir() {
+  echo "$(state_root "$1")/$2.units"
+}
+
+# unit_capacity <store-slug> -> orchestration.unit_concurrency, else
+# orchestration.concurrency, else 1. A unit is a different resource than a
+# change, so it gets its own key, defaulting to the change-level one so an
+# unconfigured store behaves as before this feature existed.
+unit_capacity() {
+  local slug="$1"
+  local cfg; cfg="$(store_config "$slug")"
+  local n
+  n="$(awk '/^orchestration:/{f=1;next} f && /^[a-zA-Z]/{exit} f && /unit_concurrency:/{print $2; exit}' "$cfg" 2>/dev/null || true)"
+  if [ -n "$n" ]; then
+    echo "$n"
+    return 0
+  fi
+  concurrency_cap "$slug"
+}
+
+# parallel_mode <store-slug> <state-file> -> true|false. Empty state field
+# reads the store's orchestration.parallel; empty there reads true; any
+# other value is a caller error (next_action exits non-zero).
+parallel_mode() {
+  local slug="$1" file="$2"
+  local v; v="$(state_field "$file" parallel)"
+  if [ -z "$v" ]; then
+    local cfg; cfg="$(store_config "$slug")"
+    v="$(awk '/^orchestration:/{f=1;next} f && /^[a-zA-Z]/{exit} f && /^[[:space:]]+parallel:/{print $2; exit}' "$cfg" 2>/dev/null || true)"
+  fi
+  v="${v:-true}"
+  case "$v" in
+    true|false) echo "$v" ;;
+    *) echo "unknown parallel '$v' (expected true|false)" >&2; return 1 ;;
+  esac
+}
+
+UNIT_ITER_CAP=5
+
+# --- map dialect: "<k>=<a>,<b>;<k>=<c>" shared by seams/units/unit_deps/
+# unit_tasks. Nothing outside these two functions parses that dialect.
+map_keys() {
+  local value="$1"
+  [ -n "$value" ] || return 0
+  local old_ifs="$IFS" out=""
+  IFS=';'
+  local pair
+  for pair in $value; do
+    [ -n "$pair" ] || continue
+    out="$out${pair%%=*} "
+  done
+  IFS="$old_ifs"
+  printf '%s\n' "${out% }"
+}
+
+map_get() {
+  local value="$1" key="$2"
+  [ -n "$value" ] || return 0
+  local old_ifs="$IFS"
+  IFS=';'
+  local pair
+  for pair in $value; do
+    [ -n "$pair" ] || continue
+    if [ "${pair%%=*}" = "$key" ]; then
+      IFS="$old_ifs"
+      echo "${pair#*=}"
+      return 0
+    fi
+  done
+  IFS="$old_ifs"
+  return 0
+}
+
+UNIT_NAME_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
+
+# units_check <store-slug> <name> -- state-only: reads the change's units,
+# unit_deps, unit_tasks, seams fields and nothing else (no tasks.md, no
+# worktree). Replaces an LLM critique of the split with mechanical
+# properties: kebab names, every dep a known unit, deps acyclic, every unit
+# file in some seams list, two units with overlapping files ordered by a
+# dep path, every unit has >=1 file, a task id in at most one unit.
+units_check() {
+  local slug="$1" name="$2"
+  local f="$(state_root "$slug")/$name.yaml"
+  [ -f "$f" ] || { echo "no state for change $name in store $slug" >&2; return 1; }
+  local units_v unit_deps_v unit_tasks_v seams_v
+  units_v="$(state_field "$f" units)"
+  unit_deps_v="$(state_field "$f" unit_deps)"
+  unit_tasks_v="$(state_field "$f" unit_tasks)"
+  seams_v="$(state_field "$f" seams)"
+
+  local units_list; units_list="$(map_keys "$units_v")"
+  [ -n "$units_list" ] || { echo "units check: no units recorded" >&2; return 1; }
+
+  local u
+  for u in $units_list; do
+    if ! [[ "$u" =~ $UNIT_NAME_RE ]]; then
+      echo "units check: bad unit name '$u' (expected kebab-case)" >&2
+      return 1
+    fi
+    local files; files="$(map_get "$units_v" "$u")"
+    [ -n "$files" ] || { echo "units check: unit '$u' has no files" >&2; return 1; }
+  done
+
+  # seam files: union of every seams group's file list
+  local seam_files=","
+  local sk
+  for sk in $(map_keys "$seams_v"); do
+    local sf; sf="$(map_get "$seams_v" "$sk")"
+    local old_ifs="$IFS"; IFS=','
+    local one
+    for one in $sf; do
+      [ -n "$one" ] || continue
+      seam_files="$seam_files$one,"
+    done
+    IFS="$old_ifs"
+  done
+  for u in $units_list; do
+    local files; files="$(map_get "$units_v" "$u")"
+    local old_ifs="$IFS"; IFS=','
+    local one
+    for one in $files; do
+      [ -n "$one" ] || continue
+      case "$seam_files" in
+        *",$one,"*) ;;
+        *) echo "units check: file '$one' (unit '$u') is not in any seams list" >&2; return 1 ;;
+      esac
+    done
+    IFS="$old_ifs"
+  done
+
+  # deps: known units only
+  local dep_keys; dep_keys="$(map_keys "$unit_deps_v")"
+  for u in $dep_keys; do
+    case " $units_list " in *" $u "*) ;; *) echo "units check: unit_deps names unknown unit '$u'" >&2; return 1 ;; esac
+    local deps; deps="$(map_get "$unit_deps_v" "$u" | tr ',' ' ')"
+    local d
+    for d in $deps; do
+      [ -n "$d" ] || continue
+      case " $units_list " in *" $d "*) ;; *) echo "units check: unit '$u' depends on unknown unit '$d'" >&2; return 1 ;; esac
+    done
+  done
+
+  # acyclic: DFS with a visiting/visited mark kept in space-delimited lists
+  local visiting=" " visited=" "
+  _units_check_visit() {
+    local node="$1"
+    case "$visiting" in
+      *" $node "*)
+        # report the cycle path from the re-entered node onward, so every
+        # node on the cycle is named, not just the one that closed it
+        local path; path="$(echo "$visiting" | sed -e "s/^ *//" -e "s/ *$//")"
+        local cycle="" seen_start=""
+        local n
+        for n in $path; do
+          if [ "$n" = "$node" ]; then seen_start=1; fi
+          [ -n "$seen_start" ] && cycle="$cycle$n "
+        done
+        echo "units check: cycle in unit_deps: ${cycle}${node}" >&2
+        return 1
+        ;;
+    esac
+    case "$visited" in *" $node "*) return 0 ;; esac
+    visiting="$visiting$node "
+    local d
+    for d in $(map_get "$unit_deps_v" "$node" | tr ',' ' '); do
+      [ -n "$d" ] || continue
+      _units_check_visit "$d" || return 1
+    done
+    visiting="${visiting/ $node / }"
+    visited="$visited$node "
+    return 0
+  }
+  for u in $units_list; do
+    _units_check_visit "$u" || return 1
+  done
+
+  # dep-reachability, for the overlap check below
+  _units_depends_on() { # <a> <b> -> 0 if a depends on b, directly or transitively
+    local a="$1" b="$2" seen=" "
+    _udo() {
+      local n="$1"
+      case "$seen" in *" $n "*) return 1 ;; esac
+      seen="$seen$n "
+      local d
+      for d in $(map_get "$unit_deps_v" "$n" | tr ',' ' '); do
+        [ -n "$d" ] || continue
+        [ "$d" = "$b" ] && return 0
+        _udo "$d" && return 0
+      done
+      return 1
+    }
+    _udo "$a"
+  }
+
+  # overlap: two units sharing a file must be ordered by a dep path
+  local ulist=($units_list)
+  local i j
+  for ((i = 0; i < ${#ulist[@]}; i++)); do
+    for ((j = i + 1; j < ${#ulist[@]}; j++)); do
+      local ua="${ulist[$i]}" ub="${ulist[$j]}"
+      local fa; fa="$(map_get "$units_v" "$ua")"
+      local overlap=""
+      local old_ifs="$IFS"; IFS=','
+      local one
+      for one in $fa; do
+        [ -n "$one" ] || continue
+        case ",$(map_get "$units_v" "$ub")," in *",$one,"*) overlap="$one"; break ;; esac
+      done
+      IFS="$old_ifs"
+      if [ -n "$overlap" ]; then
+        if ! _units_depends_on "$ua" "$ub" && ! _units_depends_on "$ub" "$ua"; then
+          echo "units check: '$ua' and '$ub' both list '$overlap' with no dep path between them" >&2
+          return 1
+        fi
+      fi
+    done
+  done
+
+  # task ids: each in at most one unit
+  local seen_tasks=","
+  for u in $units_list; do
+    local tasks; tasks="$(map_get "$unit_tasks_v" "$u")"
+    local old_ifs="$IFS"; IFS=','
+    local t
+    for t in $tasks; do
+      [ -n "$t" ] || continue
+      case "$seen_tasks" in
+        *",$t,"*) echo "units check: task '$t' is assigned to more than one unit" >&2; return 1 ;;
+      esac
+      seen_tasks="$seen_tasks$t,"
+    done
+    IFS="$old_ifs"
+  done
+  return 0
+}
+
+# units_ready <store-slug> <name> -- prints "ready: <u> ...", "running: <u>
+# ...", "capacity: <n>". A slot holder is a unit whose state file has
+# status running|reviewing|conflict|resolving. Ready units are
+# those with no state file or `status: pending` whose deps are all merged, in `units`
+# field order, capped at the free capacity.
+units_ready() {
+  local slug="$1" name="$2"
+  local f="$(state_root "$slug")/$name.yaml"
+  local units_v unit_deps_v
+  units_v="$(state_field "$f" units)"
+  unit_deps_v="$(state_field "$f" unit_deps)"
+  local udir; udir="$(unit_state_dir "$slug" "$name")"
+  local cap; cap="$(unit_capacity "$slug")"
+
+  status_of() {
+    local uf="$udir/$1.yaml"
+    [ -f "$uf" ] && state_field "$uf" status || echo pending
+  }
+  local running="" u
+  for u in $(map_keys "$units_v"); do
+    local st; st="$(status_of "$u")"
+    case "$st" in running|reviewing|conflict|resolving) running="$running$u " ;; esac
+  done
+  local holders; holders="$(echo "$running" | tr -s ' ' '\n' | grep -c . || true)"
+  local free=$((cap - holders))
+  [ "$free" -ge 0 ] || free=0
+
+  local ready="" count=0
+  for u in $(map_keys "$units_v"); do
+    [ "$count" -lt "$free" ] || break
+    local st; st="$(status_of "$u")"
+    [ "$st" = pending ] || continue
+    local ok=1 d
+    for d in $(map_get "$unit_deps_v" "$u" | tr ',' ' '); do
+      [ -n "$d" ] || continue
+      [ "$(status_of "$d")" = merged ] || { ok=0; break; }
+    done
+    [ "$ok" = 1 ] || continue
+    ready="$ready$u "
+    count=$((count + 1))
+  done
+
+  printf 'ready: %s\n' "${ready% }"
+  printf 'running: %s\n' "${running% }"
+  printf 'capacity: %s\n' "$free"
+}
+
+# units_merge_order <store-slug> <name> -- Kahn's algorithm over unit_deps,
+# ties broken by `units` field order; exits non-zero naming the units left
+# on a cycle.
+units_merge_order() {
+  local slug="$1" name="$2"
+  local f="$(state_root "$slug")/$name.yaml"
+  local units_v unit_deps_v
+  units_v="$(state_field "$f" units)"
+  unit_deps_v="$(state_field "$f" unit_deps)"
+  local order=() remaining=($(map_keys "$units_v"))
+  while [ "${#remaining[@]}" -gt 0 ]; do
+    local progressed=0
+    local next_remaining=()
+    local u
+    for u in "${remaining[@]}"; do
+      local ok=1 d
+      for d in $(map_get "$unit_deps_v" "$u" | tr ',' ' '); do
+        [ -n "$d" ] || continue
+        case " ${order[*]:-} " in *" $d "*) ;; *) ok=0 ;; esac
+      done
+      if [ "$ok" = 1 ]; then
+        order+=("$u")
+        progressed=1
+      else
+        next_remaining+=("$u")
+      fi
+    done
+    remaining=(${next_remaining[@]+"${next_remaining[@]}"})
+    if [ "$progressed" = 0 ]; then
+      echo "units merge-order: cycle involving ${remaining[*]}" >&2
+      return 1
+    fi
+  done
+  echo "${order[*]}"
 }
 
 ensure_workspace_ignored() {
@@ -442,11 +816,163 @@ critic_tier()  { critic_pick "$1" "$2" | cut -d' ' -f1; }
 #   reason    the rule that produced this answer
 #   also      a second, read-only step to dispatch concurrently (only on
 #   also_model  `check`: Verify, with its tier-above model id)
+#   running   (phase=applying only, every output but split) the unit slot
+#             holders at this moment, possibly empty
+#   units     (phase=applying only, where the action names units) the
+#             units the action applies to
 # Every threshold here mirrors a rule in AUTONOMOUS-ORCHESTRATION.md; if
 # they ever disagree, the doc is wrong and this is right, because this is
 # what runs. Read-only: the orchestrator does the step and records results.
 FIX_CAP=3
 PROPOSE_CAP=2
+
+# next_action_applying <slug> <name> <state-file> <lifecycle> -- the
+# phase=applying action table. Reads only state files (the change's and
+# each unit's) and the session log, same as next_action overall. Every
+# output other than split carries a running: line (slot holders, possibly
+# empty) and, where it names units, a units: line.
+next_action_applying() {
+  local slug="$1" name="$2" f="$3" lc="$4"
+  local units_v; units_v="$(state_field "$f" units)"
+
+  _na_emit() { # action tier model reason [set_phase]
+    printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
+    [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
+    printf 'reason: %s\n' "$4"
+  }
+
+  if [ -z "$units_v" ]; then
+    local pmode; pmode="$(parallel_mode "$slug" "$f")" || return 1
+    if [ "$lc" = full ] && [ "$pmode" = true ]; then
+      _na_emit split deep "$(model_for_tier "$slug" deep)" "write units/unit_deps/unit_tasks/ui_units (seam dialect), then run units check"
+    else
+      _na_emit split none - "$lc lifecycle or parallel false: run units single (--ui if the change has UI) to make one unit 'all'"
+    fi
+    return 0
+  fi
+
+  units_check "$slug" "$name" || return 1
+
+  local udir; udir="$(unit_state_dir "$slug" "$name")"
+  local unit_list; unit_list="$(map_keys "$units_v")"
+  local unit_deps_v; unit_deps_v="$(state_field "$f" unit_deps)"
+
+  _na_status() {
+    local uf="$udir/$1.yaml"
+    [ -f "$uf" ] && state_field "$uf" status || echo pending
+  }
+
+  local ready_out; ready_out="$(units_ready "$slug" "$name")"
+  local ready_line running_line
+  ready_line="$(printf '%s\n' "$ready_out" | sed -n 's/^ready: //p')"
+  running_line="$(printf '%s\n' "$ready_out" | sed -n 's/^running: //p')"
+
+  local u
+
+  # a unit failed -> gate1
+  for u in $unit_list; do
+    [ "$(_na_status "$u")" = failed ] || continue
+    _na_emit gate1 none - "unit $u failed (iteration cap reached, or an unrecoverable merge conflict)"
+    printf 'running: %s\n' "$running_line"
+    return 0
+  done
+
+  # a unit is in conflict -> merge-conflict
+  for u in $unit_list; do
+    [ "$(_na_status "$u")" = conflict ] || continue
+    _na_emit merge-conflict standard "$(model_for_tier "$slug" standard)" "unit $u has a rebase conflict: dispatch one agent confined to the conflicting files, then run unit merge again"
+    printf 'units: %s\n' "$u"
+    printf 'running: %s\n' "$running_line"
+    return 0
+  done
+
+  # reviewing with a blocking critique -> unit-revise, or gate1 at the cap
+  for u in $unit_list; do
+    local uf="$udir/$u.yaml"
+    [ -f "$uf" ] || continue
+    [ "$(state_field "$uf" status)" = reviewing ] || continue
+    local ucrit; ucrit="$(state_field "$uf" critique)"
+    case "$ucrit" in
+      blocking:*)
+        local iters; iters="$(state_field "$uf" iterations)"; iters="${iters:-0}"
+        if [ "$iters" -lt "$UNIT_ITER_CAP" ]; then
+          _na_emit unit-revise standard "$(model_for_tier "$slug" standard)" "unit $u critique $ucrit, iteration $iters/$UNIT_ITER_CAP: set unit $u status running critique \"\" first, then resume or re-dispatch the worker with the report"
+          printf 'units: %s\n' "$u"
+        else
+          _na_emit gate1 none - "unit $u critique still blocking at the iteration cap ($iters/$UNIT_ITER_CAP)"
+        fi
+        printf 'running: %s\n' "$running_line"
+        return 0
+        ;;
+    esac
+  done
+
+  # reviewed units whose deps are all merged -> unit-merge, in merge order
+  local mergeorder; mergeorder="$(units_merge_order "$slug" "$name")" || return 1
+  local mergeable=""
+  for u in $mergeorder; do
+    local uf="$udir/$u.yaml"
+    [ -f "$uf" ] || continue
+    [ "$(state_field "$uf" status)" = reviewed ] || continue
+    local depsok=1 d
+    for d in $(map_get "$unit_deps_v" "$u" | tr ',' ' '); do
+      [ -n "$d" ] || continue
+      [ "$(_na_status "$d")" = merged ] || { depsok=0; break; }
+    done
+    [ "$depsok" = 1 ] && mergeable="$mergeable$u "
+  done
+  if [ -n "$mergeable" ]; then
+    _na_emit unit-merge none - "reviewed units with every dep merged: fast-forward each onto change/$name in dependency order"
+    printf 'units: %s\n' "${mergeable% }"
+    printf 'running: %s\n' "$running_line"
+    return 0
+  fi
+
+  # green with no critique yet -> unit-critique
+  local green_units=""
+  for u in $unit_list; do
+    local uf="$udir/$u.yaml"
+    [ -f "$uf" ] || continue
+    [ "$(state_field "$uf" status)" = green ] || continue
+    [ -z "$(state_field "$uf" critique)" ] || continue
+    green_units="$green_units$u "
+  done
+  if [ -n "$green_units" ]; then
+    _na_emit unit-critique "$(critic_tier "$slug" "$name")" "$(critic_model "$slug" "$name")" "green units with no critique yet: one tier above the logged proposer"
+    printf 'units: %s\n' "${green_units% }"
+    printf 'running: %s\n' "$running_line"
+    return 0
+  fi
+
+  # capacity free and a unit is ready -> unit-spawn
+  if [ -n "$ready_line" ]; then
+    _na_emit unit-spawn standard "$(model_for_tier "$slug" standard)" "capacity free: unit create then one Agent per ready unit"
+    printf 'units: %s\n' "$ready_line"
+    printf 'running: %s\n' "$running_line"
+    return 0
+  fi
+
+  # something is still in flight -> wait
+  if [ -n "$running_line" ]; then
+    _na_emit wait none - "a worker or critic is in flight: call next again when it returns"
+    printf 'running: %s\n' "$running_line"
+    return 0
+  fi
+
+  # every unit merged -> units-merged
+  local all_merged=1
+  for u in $unit_list; do
+    [ "$(_na_status "$u")" = merged ] || { all_merged=0; break; }
+  done
+  if [ "$all_merged" = 1 ]; then
+    _na_emit units-merged none - "every unit merged: rerun the full gate + Verify on the change branch" checking
+    printf 'running: %s\n' "$running_line"
+    return 0
+  fi
+
+  echo "units stalled for $name: no unit is ready, running, reviewed, green, or merged" >&2
+  return 1
+}
 
 next_action() {
   local slug="$1" name="$2"
@@ -524,13 +1050,13 @@ next_action() {
         "")
           emit gate0 none - "waiting on the human: show the short resume, offer the full proposal, and get accept or request-changes.$gate0_light" ;;
         accepted)
-          emit apply standard "$(model_for_tier "$slug" standard)" "human accepted the proposal" applying ;;
+          emit apply none - "commit everything git status --porcelain shows in the change worktree, record phase applying, then call next: the split follows" applying ;;
         revise)
           emit propose "$ptier" "$(model_for_tier "$slug" "$ptier")" "human requested changes: restart Propose with the feedback file as new context; clear last_critique_result, prev_critique_result, propose_rounds and acceptance first, then critique reruns and a new resume is shown at Gate 0" proposed ;;
         *) echo "unknown acceptance '$accept' (expected accepted|revise)" >&2; return 1 ;;
       esac ;;
     applying)
-      emit apply standard "$(model_for_tier "$slug" standard)" "implement dispatch groups; quick gate + commit per wave; then record phase checking" checking ;;
+      next_action_applying "$slug" "$name" "$f" "$lc" || return 1 ;;
     checking)
       case "$gate" in
         "")

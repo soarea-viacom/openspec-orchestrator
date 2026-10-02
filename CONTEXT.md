@@ -6,8 +6,10 @@
 - **Change**: the unit of branch, workspace, gate and merge
   (`change/<name>` branch in the target project's repo, worktree checked
   out at `<store>/.orchestration/workspaces/<name>` — `workspace_path` in
-  `scripts/lib.sh` is the only place that path is built). Gates run in the
-  worktree, never the project's main checkout.
+  `scripts/lib.sh` is the only place that path is built, and also builds
+  each unit's own worktree at `<name>.<unit>` off its own branch
+  `change/<name>.<unit>`). Gates run in a worktree — the change's own, or
+  `--unit <u>`'s — never the project's main checkout.
 - **State module**: `scripts/lib.sh` (`state_root`, `state_field`,
   `state_write`) — sole owner of the state-file YAML dialect under
   `<store>/.orchestration/state/`. Nothing else parses those files. All
@@ -15,11 +17,13 @@
   through one helper, `set_record` in `scripts/run-change`, which is also
   where the `prev_*_result` shift lives.
 - **Worker**: one agent dispatched by the orchestrator into its own context
-  window for one task — a dispatch group, a fixer, a critic, a Verify
+  window for one task — a unit worker, a fixer, a critic, a Verify
   checker, a triage read. Receives only what the orchestrator hands it plus
-  what it reads from disk; never another agent's transcript. Writers stay
-  inside their seam's file list and never run a git command that writes;
-  read-only workers are exempt from the disjoint-files check.
+  what it reads from disk; never another agent's transcript. A unit worker
+  is the one writer that does run git writes, confined to its own unit
+  worktree and branch (see **Unit**); every other writer stays inside its
+  file list and never runs a git command that writes. Read-only workers
+  are exempt from the disjoint-files check.
 - **Advisor**: a read-only `deep`-tier subagent a stuck `standard` or
   `mechanical` worker asks one packaged question, fresh context, answer
   only. Obtained only via `scripts/run-change advisor request --worker
@@ -31,10 +35,56 @@
 - **Blackboard**: the orchestrator-owned files agents share through —
   proposal, seam list, state, reports. The only channel between agents;
   there is no worker-to-worker messaging.
-- **Dispatch group**: the unit of concurrent implementation within a
-  change — one writer worker per seam from the seam list, all sharing the
-  change's worktree. The orchestrator commits once per wave after the
-  quick gate; workers never commit.
+- **Unit**: the unit of concurrent implementation within a change — one
+  independent slice of the seam list and tasks.md, recorded in state
+  (`units`, `unit_deps`, `unit_tasks`, `ui_units`, the seam dialect for the
+  first three) and given its own worktree (`<ws>/<name>.<unit>`) and
+  branch (`change/<name>.<unit>`, `unit_branch` in `scripts/lib.sh`). A
+  unit worker is the sole writer there and the only kind of worker that
+  commits; the merger (below) integrates a reviewed unit onto
+  `change/<name>` once its deps have. `split` (tier `deep` under the full
+  parallel path, else `units single` at `none`) writes the four fields and
+  runs `units_check`.
+- **Unit state file**: `<store>/.orchestration/state/<name>.units/<unit>.yaml`
+  — one file per unit, not a field on the change file, because concurrent
+  unit workers calling `unit iterate` would otherwise race a shared
+  read-modify-write. Fields: `status` (`pending` → `running` → `green` →
+  `reviewing` → `reviewed` → `merged`, or `failed`, or `conflict` →
+  `resolving`), `iterations`, `base` (the sha the unit branched from),
+  `checks_commit`, `screenshot` (absolute path of the latest green
+  iteration's PNG), `critique`, `merge_attempts`. Written through `unit
+  set`/`unit get --unit <u>`, same `set_record` machinery as the change
+  file.
+- **Scheduler**: `units next` — the units whose deps are all `merged` and
+  have no unit file or `status: pending`, in `units` field order, up to the free capacity
+  (`orchestration.unit_concurrency`, else `orchestration.concurrency`,
+  else 1). A unit with status `running`, `reviewing`, `conflict`, or
+  `resolving` holds a slot — review and conflict resolution reuse the slot
+  the unit already holds rather than freeing it for a new unit to start.
+- **Unit critique**: the critic dispatched over `units ready-for-review`
+  (every `green` unit with no `critique` recorded yet), one tier above the
+  logged proposer (`max` under `full`, `deep` under `light` — not the
+  implementer's tier, which for a unit worker is always `standard`). Its
+  report, `<name>.units/<unit>.critique.md`, must quote the unit's
+  recorded `screenshot` path verbatim for a unit in `ui_units`; `unit set
+  critique` refuses otherwise. `blocking` sends the unit back to
+  `unit-revise` within its own iteration cap; there is no separate
+  critique-round counter (see **Checker loops** in
+  AUTONOMOUS-ORCHESTRATION.md).
+- **Unit merge**: `units merge-order` (topological over `unit_deps`, ties
+  by `units` field order) then `unit merge --unit <u>`, tier `none`:
+  rebase the unit branch onto `change/<name>`, fast-forward, tick the
+  unit's `unit_tasks` in tasks.md, remove the unit worktree and branch. A
+  rebase conflict dispatches a `standard` merge-conflict agent confined to
+  the files it named; a second conflict, or an unfinished `resolving`
+  rebase, fails the unit to **Gate 1**. Every rebase attempt — success or
+  conflict — appends an `event merge` session entry; a refusal (wrong
+  status, unmerged dep, out-of-scope diff) logs nothing.
+- **Parallel mode**: the `parallel` state field — `true` (default, empty
+  reads the store's `orchestration.parallel`, else `true`) or `false`.
+  `false` makes `split` run `units single` at tier `none`, so the change's
+  tasks run as one unit instead of fanning out, for comparing a parallel
+  run against a single-worker baseline from the same trunk commit.
 - **Slot**: a concurrency token under `<store>/.orchestration/slots/`,
   capped by `orchestration.concurrency` in the store's config.
 - **Seam list**: the `seams` field in a change's state file, written during
@@ -130,11 +180,12 @@
 - **Lifecycle**: the state field `lifecycle`, `full` or `light` (empty
   reads as `full`; any other value errors). Under `light`, Propose and
   `revise` run at `standard` instead of `deep` (the critic still resolves
-  one tier above, to `deep`); a green gate with `warnings:<m>` skips the
-  mechanical sweep instead of running it. Everything else, including Gate
-  0, is unchanged. Set only by triage on the bugfix change it opens, or by
-  the human through Gate 0's "Accept — light lifecycle" option — never by
-  the orchestrator for any other change.
+  one tier above, to `deep`); `split` runs `units single`, so the change is
+  exactly one unit; a green gate with `warnings:<m>` skips the mechanical
+  sweep instead of running it. Everything else, including Gate 0, is
+  unchanged. Set only by triage on the bugfix change it opens, or by the
+  human through Gate 0's "Accept — light lifecycle" option — never by the
+  orchestrator for any other change.
 - **Manual tasks**: `scripts/run-change tasks open --store <slug> --name
   <change>` prints the change's unchecked `- [ ]` task lines and records
   their count as the state field `manual_tasks_open` (an explicit `0` when

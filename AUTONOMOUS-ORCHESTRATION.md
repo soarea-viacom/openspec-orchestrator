@@ -77,7 +77,16 @@ the only backward edge in the diagram. State lives in
 `acceptance`, `fix_attempts`, `last_gate_result`, `gate_tree`,
 `last_verify_result`, `prev_verify_result`, `initiative`, `depends_on`,
 `seams`, `follows`, `supersedes`, `blocked_on`, `lifecycle`,
-`manual_tasks_open`, `manual_accept`. `acceptance` holds Gate 0's
+`manual_tasks_open`, `manual_accept`, `units`, `unit_deps`, `unit_tasks`,
+`ui_units`, `parallel`. The last five drive the units loop (step 4 below):
+`units` and `unit_deps` share the `seams` dialect (`<u>=<file>,<file>;...`
+/ `<u>=<dep>,<dep>;...`); `unit_tasks` maps each unit to its tasks.md ids
+the same way; `ui_units` is a bare `<u>,<u>` list; `parallel` is `""`,
+`true`, or `false` (empty reads the store's `orchestration.parallel`, else
+`true`). A per-unit file holds what the change file cannot (concurrent
+unit workers would race a shared field): `<store>/.orchestration/state/
+<name>.units/<unit>.yaml` — `status`, `iterations`, `base`,
+`checks_commit`, `screenshot`, `critique`, `merge_attempts`. `acceptance` holds Gate 0's
 pending human answer — `""` (waiting), `accepted`, or `revise` — and is
 cleared back to `""` every time it is acted on, by whichever step consumes
 it. `gate_tree` is written by `gate run --mode full`
@@ -143,7 +152,7 @@ append`, never edited after the fact.
    to the change's state (`scripts/run-change state set ... seams
    "<seam>=<file>,<file>;<seam>=<file>"` — see **Seam list** in
    CONTEXT.md), not just narrated in the delta spec prose — it is the input
-   dispatch groups are cut along in step 4 and what the disjoint-files
+   units are cut along in step 4 and what the disjoint-files
    check reads, not a separate exercise redone at Apply time. Log the
    session entry with `phase proposed` before the critique below runs.
 
@@ -262,24 +271,86 @@ append`, never edited after the fact.
    defect report. It never skips, either: a change that already cleared
    Gate 0 once and comes back for a `revise` round goes through it again,
    in full, on the new draft.
-4. **Apply** — implement in dispatch groups, one per seam from the Propose
-   step's seam list (see model/effort tiers below). Under `lifecycle: light`,
-   Apply continues the proposer's worker's own session when the host can
-   resume an agent, else it dispatches a fresh `standard` worker; `next`'s
-   output is identical either way. Before fanning groups
-   out, run the disjoint-files check below; a change too small to have
-   named more than one seam stays a single group. Groups that pass the
-   check run concurrently as separate workers in the change's one worktree,
-   each confined to its seam's file list (see **Isolation** below: own
-   context, no git writes). Any test fixture that takes seconds to build —
-   a compiled binary, a bundled app, a container image — is built once per
-   test run into a shared fixture (a `before`/global/session hook, not a
-   per-test or per-file one); Verify reports a per-test or per-file rebuild
-   as a warning. When every group in the wave has returned, the
-   orchestrator runs the project's *quick* gate (lint, type check,
-   last-failed tests — `orchestration.gate_quick` from the store's config,
-   kept under ~30 s; slower work belongs in `gate_full`)
-   and commits — never while a worker is still writing.
+4. **Apply** — `apply` itself is bookkeeping, tier `none`: commit whatever
+   `git status --porcelain` shows in the change worktree (proposal
+   artifacts in local mode; a pre-1.4.0 change resumed straight into
+   `applying` may also hold uncommitted wave edits from before units
+   existed), record `phase: applying`, and call `next` again — no worker
+   is dispatched on this step. Implementation runs in **units**: each
+   independent slice of the Propose step's seam list gets its own
+   worktree, branch, and Agent, reviewed and merged on its own before
+   Check/Verify ever run.
+
+   **Split.** With `units` empty, `next` returns `split` — tier `deep`
+   under `lifecycle: full` with parallel mode on (the generator): it reads
+   the seam list and tasks.md and writes four state fields, `units`
+   (`<u>=<file>,<file>;...`, the seam dialect), `unit_deps`
+   (`<u>=<dep>,<dep>;...`), `unit_tasks` (`<u>=<task-id>,...;...`), and
+   `ui_units` (`<u>,<u>`), then runs `units check` (state-only: acyclic
+   deps, every dep a known unit, every file in some `seams` group, two
+   units with overlapping files ordered by a dep path, every task id in at
+   most one unit — the CLI also prints `unassigned: <id>` for a tasks.md
+   id in no unit, not an error). Under `lifecycle: light` or `parallel:
+   false` (**Single-worker baseline** below), `split` instead runs `units
+   single [--ui]` at tier `none`: one unit `all` holding every seam file
+   and every task id. A change too small to have named more than one seam
+   still goes through `split` and gets one unit.
+
+   **Spawn.** The scheduler, `units next`, lists ready units (no dep
+   outstanding, in `units` field order) up to the free capacity
+   (`orchestration.unit_concurrency`, else `orchestration.concurrency`,
+   else 1 — a unit `running`, `reviewing`, `conflict`, or `resolving` holds
+   a slot). `next` returns `unit-spawn` naming the ready units; the
+   orchestrator runs `unit create --unit <u>` for each (branches
+   `change/<name>.<u>` off the tip of `change/<name>` into
+   `<ws>/<name>.<u>`, refusing an unknown unit, a dep not yet `merged`, or
+   a dirty change worktree) and dispatches one `standard` Agent per unit
+   into that worktree — see **Unit workers** below for the dispatch
+   contract and the check-first loop it runs (`unit iterate`, capped at 5).
+   Units with no dependency between them run concurrently, each in its own
+   worktree and branch, so none of the Isolation or disjoint-files
+   reasoning about a shared worktree applies to them; a dependent's
+   worktree is only created after its dep has merged onto `change/<name>`,
+   so it starts from the dep's own code.
+
+   **Critique.** Once a unit goes `green`, `next` returns `unit-critique`
+   (tier one above the logged proposer, `max` under full) over `units
+   ready-for-review`: the critic reads the unit's diff from its `base`, the
+   checks diff to its `checks_commit`, and every recorded screenshot, and
+   its report must quote the unit's recorded screenshot path verbatim for
+   a UI unit. Clean or warnings → `status: reviewed`. Blocking, within the
+   cap → `unit-revise` (same worker, same cap); out of cap → `gate1`. On
+   `unit-revise` the orchestrator sets `unit set --unit <u> status running
+   critique ""` before resuming or re-dispatching the worker — otherwise the
+   unit stays `reviewing` with a blocking critique and a repeated `next`
+   dispatches the same worker again, and once the revised worker's `unit
+   iterate` goes green the unit is left with a stale blocking critique
+   instead of being picked up by `unit-critique`.
+
+   **Merge.** A unit `reviewed` with every dep `merged` yields `unit-merge`
+   (tier `none`, in `units merge-order`): rebase the unit branch onto
+   `change/<name>`, fast-forward the change branch, tick the unit's task
+   ids in tasks.md, remove the unit worktree and branch. A rebase conflict
+   → `merge-conflict` (`standard`, confined to the conflicting files, one
+   attempt) then `unit merge` again; a second conflict, or a `resolving`
+   unit whose rebase never finished, → `failed` → `gate1`. This merging
+   happens inside the units loop itself, not in step 8's merge lane — a
+   dependent cannot start until its dep's code is actually on
+   `change/<name>`.
+
+   Once every unit is `merged`, `next` returns `units-merged` with
+   `set_phase: checking`, and step 5 below runs the existing full gate and
+   Verify on the change branch, unchanged — the units loop only replaces
+   how the code gets onto that branch, not what checks it afterward.
+
+   Under `lifecycle: light`, `split` still runs `units single` and the
+   loop above runs for that one unit `all`; its worker is the proposer's
+   own session resumed where the host can resume an agent, else a fresh
+   `standard` worker — `next`'s output is identical either way. Any test
+   fixture that takes seconds to build — a compiled binary, a bundled app,
+   a container image — is built once per test run into a shared fixture (a
+   `before`/global/session hook, not a per-test or per-file one); Verify
+   reports a per-test or per-file rebuild as a warning.
 5. **Check** — run the project's *full* gate
    (`orchestration.gate_full`, parallelized if the project's test runner
    supports it) **and dispatch Verify (step 6) at the same time**: both
@@ -399,12 +470,77 @@ append`, never edited after the fact.
 Everything between gates is autonomous. Commits on `change/<name>` never
 ask. Squash-merge produces one commit per change on the project's trunk.
 
+## Unit workers
+
+A unit worker's dispatch carries the proposal and delta spec, its unit's
+task ids and their tasks.md text, its file list, its worktree path, the
+engine path, and the commands below — never another unit's transcript.
+
+- **Checks first.** Step 1, before any implementation: write executable
+  checks — unit tests in the project's own runner for each requirement the
+  unit's tasks implement, and for a unit in `ui_units`, a Playwright
+  script. Commit them, then `unit checks-done --unit <u>`, which records
+  the unit branch HEAD as `checks_commit` and refuses while HEAD still
+  equals `base` (nothing committed yet). `unit iterate` refuses until
+  `checks_commit` is set. The checks must be part of what `gate_quick`
+  runs, so the critic's `git diff base..checks_commit` is read against the
+  same thing the loop below actually checks.
+- **UI layout invariants.** A Playwright script for a UI unit launches the
+  page at 1280×800 and writes a full-page screenshot to `$UNIT_SCREENSHOT`
+  only when `$UNIT_NAME` equals the unit that owns that test (both
+  exported by `unit iterate`) — a non-owning unit's UI test still runs and
+  asserts, it just writes no file, so the recorded PNG is always the
+  iterating unit's own view. It asserts: the board/canvas element's
+  bounding box lies inside the viewport; the page has no horizontal
+  overflow; every SVG shape has a computed `fill` or `stroke` other than
+  `none`/transparent; every cell of a DOM-grid board has a non-transparent
+  computed background; plus one assertion per requirement the unit
+  implements. `playwright` is the one dependency a worker may add — a
+  target-project devDependency, only when the unit is in `ui_units` and
+  the project lacks it, listed in that unit's files (so `units check`
+  orders every other unit touching `package.json`/the lockfile after it)
+  and visible in the Gate 2 diffstat. The browser binary itself is a
+  machine-level cache download outside the project, done once before a run
+  with the human's approval. The engine never depends on Playwright.
+- **The loop.** Implement, then `unit iterate --unit <u>` — the engine, not
+  the worker, runs `gate_quick` in the unit worktree with
+  `UNIT_SCREENSHOT`/`UNIT_NAME` exported and derives green/red from its
+  exit code (green for a UI unit also requires the PNG to exist). Fix on
+  red, iterate again; at most 5 iterations (`UNIT_ITER_CAP`) — a 6th call
+  is refused and the unit is marked `failed`. The worker never asserts its
+  own result; the recorded `checks` value always comes from a command the
+  engine ran.
+- **Git.** A unit worker commits only on its own unit branch, only its
+  unit's files (`git add -- <files>`, never `-A`), with trailers `Change:
+  <name>` and `Unit: <u>`. It never pushes, rebases, merges, checks out,
+  resets, or touches any other branch, and it never edits tasks.md —
+  concurrent units would race it; `unit merge` ticks the unit's tasks once
+  it lands on `change/<name>`.
+- **Session log shapes** (all `phase=unit`): spawn —
+  `role worker phase unit unit <u> event spawn tier standard model <m>
+  transcript_id <id>` (orchestrator, at `unit-spawn` and `unit-revise`);
+  iterate — `role worker phase unit unit <u> event iterate iteration <n>
+  checks <green|red> tier standard model <m>` (written by `unit iterate`
+  itself); critique — `role critic phase unit unit <u> event critique
+  iteration <n> tier <t> model <m> transcript_id <id>` (orchestrator, at
+  `unit-critique`); conflict agent — `role worker phase unit unit <u>
+  event merge-conflict tier standard model <m> transcript_id <id>`; merge
+  — `role orchestrator phase unit unit <u> event merge result
+  merged|conflict|failed` (written by `unit merge` on every rebase
+  attempt; a refusal logs nothing); and once every unit lands, `role
+  orchestrator phase unit event units-merged`. The orchestrator sets
+  `status reviewing` before dispatching a unit critic, `status resolving`
+  before dispatching the merge-conflict agent, and `status running
+  critique ""` before resuming or re-dispatching the worker at
+  `unit-revise`, so a repeated `next` never dispatches the same work
+  twice.
+
 ## Isolation
 
 Three layers keep concurrent agents from corrupting each other. They are
 independent: each one holds even if the others are misconfigured.
 
-- **Context.** Every worker — dispatch group, fixer, critic, Verify, triage
+- **Context.** Every worker — unit worker, fixer, critic, Verify, triage
   — runs in its own context window. It receives exactly what the
   orchestrator hands it (proposal, its seam's file list, its task, a
   report) plus what it reads from disk itself; never another worker's
@@ -429,14 +565,22 @@ independent: each one holds even if the others are misconfigured.
   checkers start after the wave they judge has returned and been
   committed; they may overlap freely with writers in other worktrees.
 - **Git.** Every change has its own worktree on its own branch (step 2), so
-  changes never share an index or a working tree. Within a change, the
-  concurrent dispatch groups do share the worktree, and a shared git index
-  is a shared file: two `git add`s or two commits at once corrupt it even
-  when the edited files are disjoint. Hence workers never run any git
-  command that writes — no add, commit, stash, checkout, reset, or branch.
-  The orchestrator is the only committer: once per wave after the quick
-  gate, once per phase after that. A worker that wants to "save its
-  progress" returns instead.
+  changes never share an index or a working tree. Units carry this one
+  level deeper: each unit also gets its own worktree and branch
+  (`change/<name>.<u>`), so a unit worker is the only writer of its own
+  index and HEAD, and committing there corrupts nothing else — this is the
+  one exception to "workers never run any git command that writes." A unit
+  worker commits its checks and each green iteration on its own branch only
+  (`git add -- <files>`, never `-A`; trailers `Change:`/`Unit:`), and never
+  pushes, rebases, merges, checks out, resets, or writes any other branch.
+  The merge-conflict agent is the other exception: confined to the one
+  unit worktree, it may run `git rebase change/<name>` and resolve only the
+  files `unit merge` named. Every other worker — fixer, critic, Verify,
+  triage, and a unit worker outside its own branch — never runs a git
+  command that writes. The orchestrator is the only other committer: on
+  `apply` (the change worktree), once per phase after that, and via `unit
+  merge` (none tier) integrating a reviewed unit onto `change/<name>`. A
+  worker that wants to "save its progress" returns instead.
 
 ## Disjoint-files check
 
@@ -453,12 +597,23 @@ each change's `seams` field (written during Propose, step 3 — see
 **Seam list** in CONTEXT.md), read via `scripts/run-change state get
 --store <slug> --name <change>`. Nothing infers them after the fact, and
 nothing parses the delta spec to reconstruct them. The check applies at
-two granularities, same rule, same data source:
+three granularities, same rule, same data source:
 
-- **Within a change**, across its own dispatch groups (step 4): compare
-  the `seams` groups pairwise before fanning any group out; a change whose
-  `seams` field names only one group never has this decision to make.
-  Read-only workers are outside the check entirely (see **Isolation**).
+- **Within a change, across its units** (step 4): units are the
+  intra-change concurrency unit. Each unit gets its own worktree and
+  branch, so concurrent units never share a working tree or index — the
+  check instead guards the split itself: `units_check` (state-only, run by `split` and by `next`)
+  rejects two units whose file lists overlap unless they are ordered by a
+  dep path. Overlap along a dep path is allowed, not disjoint, because a
+  dependent's worktree is created only after its dep has merged onto
+  `change/<name>`, so it starts from the dep's own code and the two units
+  are never writing the same file at the same time even though their
+  lists overlap on paper. Read-only workers are outside the check entirely
+  (see **Isolation**).
+- **Within a unit, at merge time**: `unit merge` independently refuses a
+  unit branch whose diff touches a file outside that unit's own list —
+  `units_check` catches a bad split before any worker starts, this catches
+  a worker that drifted outside its list despite the split being sound.
 - **Across a project**, among in-flight initiative children: compare the
   `seams` field of every child not yet merged before starting a new one
   concurrently, on top of (not instead of) the `depends_on` ordering.
@@ -466,7 +621,7 @@ two granularities, same rule, same data source:
 A file list that turns out to be wrong once real implementation starts
 (a shared barrel export, config, or type file no seam sketch named) is a
 mid-run finding, not a silent merge: fall back to sequential for the
-groups/children involved and fix it with `state set ... seams "..."`, the
+units/children involved and fix it with `state set ... seams "..."`, the
 same command that wrote it.
 
 ## Driving the loop: `next` decides, the agent does
@@ -483,9 +638,11 @@ record when the step completes, and the `reason` (which rule fired) — from
 the change's state file and session log alone. On `check` it adds `also:
 verify` and `also_model: <id>`: a second, read-only step to dispatch
 concurrently with the first, never a replacement for it. Actions: `propose`,
-`critique`, `revise`, `gate0`, `apply`, `check`, `fix`, `verify`, `sweep`,
-`tasks-open`, `archive`, `merge-lane`, `gate1`, `gate2-manual`, `gate2`,
-`wait`, `done`. The caps
+`critique`, `revise`, `gate0`, `apply` (tier `none` — bookkeeping only, no
+worker dispatched), `split`, `unit-spawn`, `unit-critique`, `unit-revise`,
+`unit-merge`, `merge-conflict`, `units-merged`, `check`, `fix`, `verify`,
+`sweep`, `tasks-open`, `archive`, `merge-lane`, `gate1`, `gate2-manual`,
+`gate2`, `wait`, `done`. The caps
 (`FIX_CAP`, `PROPOSE_CAP`), the fix-round tier ladder, the pass line, and
 the tier-above checker rule all live in `next_action`
 (`scripts/lib.sh`), so the orchestration is deterministic code and the
@@ -506,7 +663,13 @@ what runs, and `tests/run.sh` walks a change through every branch of it.
 from its recorded fields. Commit on the branch after every
 phase, so an interrupted run loses at most one phase. Re-running with no
 arguments resumes each in-flight change from its recorded phase, checking
-for uncommitted work first.
+for uncommitted work first. A change resumed straight into `applying` from
+before units existed may hold uncommitted wave edits from the old Apply;
+before acting on `split` for it the orchestrator commits whatever `git
+status --porcelain` shows in the change worktree, the same as `apply`
+itself does on every change — `unit create` refuses a dirty change
+worktree, so a missed commit here fails loudly instead of silently
+dropping that work from every unit's `base`.
 
 ## Bugs found mid-run: ownership decides
 
@@ -534,8 +697,11 @@ this follows from file ownership, not judgement:
 ## Initiatives (complex work split into linked changes)
 
 Split before creating a change when the request touches more than one
-independent area, needs more than ~2 dispatch groups / ~8 tasks, or contains
-parts that could merge independently. Record an initiative
+independent area, needs more than ~8 tasks, or contains parts that could
+merge independently — independently-mergeable parts, not merely
+independently-implementable ones: that is what units (Apply, step 4) are
+for *within* one change, and an initiative is for parts that cross a Gate
+2 of their own. Record an initiative
 (`scripts/run-change initiative init|set --store <slug> --name <name>
 title ... request ... children a,b,c` →
 `<store>/.orchestration/initiatives/<name>.yaml`, plus `critique_rounds`
@@ -607,7 +773,12 @@ each other forever.
   `last_*_result` with `prev_*_result` and returns `gate1` when a
   `blocking` count fails to fall. The reopened-finding half needs
   finding ids the reports don't carry, so the checker states it in the
-  report and the orchestrator acts on it.
+  report and the orchestrator acts on it. The unit critic (Apply, step 4)
+  is a third generator/checker pair but is not bounded by `propose_rounds`
+  or `fix_attempts`: a `blocking` unit critique sends the same worker back
+  for `unit-revise` under the unit's own `UNIT_ITER_CAP` (5), the cap
+  already in force for that unit's iterate loop, not a separate round
+  counter.
 - **Unconditional, by design.** The pattern is usually reserved for
   changes worth a senior review. Here it runs on every change, because in
   autonomous mode nobody reads the diff before Gate 2 — the human's read of
@@ -650,22 +821,32 @@ satisfy it, severity), same 2-round cap and convergence test.
 Pick a tier per task, not per session:
 
 - `none`: workspace create/remove, running the gate, merge lane, state/
-  initiative bookkeeping, commit trailers, archival file moves.
+  initiative bookkeeping, commit trailers, archival file moves, `apply`
+  itself, `units single`, and `unit merge` (the rebase/fast-forward/tick is
+  deterministic bash; an agent is dispatched only for `merge-conflict`).
 - `mechanical`: lint/format fixes, type-annotation-only fixes, deleting
   dead code and unused dependencies the gate's dead-code pass names,
   commit message drafting, first-round red-gate triage (flake vs lint vs
   type vs dead code vs logic).
-- `standard`: ordinary implementation tasks, tests, and — under
-  `lifecycle: light` only — Propose and `revise` (the critic still
-  resolves one tier above, to `deep`, via the generator/checker split
-  below).
+- `standard`: ordinary implementation tasks, tests, a unit worker (every
+  unit writer runs at `standard`, never a tier option — see **Unit
+  workers**), the merge-conflict agent, and — under `lifecycle: light`
+  only — Propose and `revise` (the critic still resolves one tier above,
+  to `deep`, via the generator/checker split below).
 - `deep`: Propose (drafting the delta spec and seam list, every
   `full`-lifecycle change, not just initiative decomposition — `light`
-  drafts at `standard`), design docs, anything touching an invariant, fix
-  rounds 2 and 3, and Verify of a `standard` implementer.
+  drafts at `standard`), `split` under `full` parallel mode (the unit
+  generator), design docs, anything touching an invariant, fix rounds 2
+  and 3, and Verify of a `standard` implementer.
 - `max`: the strongest model available. Never a task tier: it is reached
   only as the checker of a `deep` generator (the critic of every Propose,
-  Verify after a deep fix round).
+  Verify after a deep fix round, and the unit critic — `model critic
+  --unit` — over a unit worker). The unit critic is tied to the proposer's
+  tier, not the implementer's: every unit worker is logged `standard`, but
+  the unit critic resolves one tier above the logged *proposer* — `max`
+  under `full`, `deep` under `light`. Costed per unit, not per change: a
+  split into several concurrent units multiplies the critic calls by the
+  unit count.
 
 Specify/Plan (Propose) and Execute (Apply) are handled by the tiers above.
 The two checkers — Propose's critic and Verify — are different: they

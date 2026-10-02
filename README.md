@@ -57,9 +57,15 @@ flowchart TD
         direction TB
         P1[Propose: draft delta spec + seam list<br/>deep tier] --> P1c{Critique clean?}
         P1c -- blocking, rounds left --> P1
-        P1c -- clean/warnings --> P2[Apply: implement per seam,<br/>quick gate + commit each wave]
+        P1c -- clean/warnings --> P2[Apply: commit change worktree,<br/>split into units]
         P1c -- not converging / out of rounds --> GATE1[["Gate 1 (human)<br/>clarify the request"]]
-        P2 --> P3[Check + Verify, concurrently:<br/>full gate incl. dead-code pass<br/>checker one tier above the implementer grades code against proposal]
+        P2 --> P2U[Units: parallel worktree + branch each,<br/>check-first loop capped at 5 iterations]
+        P2U --> P2C{Unit green?<br/>critic one tier above proposer, screenshots for UI units}
+        P2C -- blocking, cap left --> P2U
+        P2C -- reviewed --> P2M[Merge unit onto change branch<br/>in dependency order]
+        P2M -- conflict --> P2CF[merge-conflict agent,<br/>one attempt] --> P2M
+        P2M -- unit failed / conflict unresolved --> GATE1
+        P2M -- all units merged --> P3[Check + Verify, concurrently:<br/>full gate incl. dead-code pass<br/>checker one tier above the implementer grades code against proposal]
         P3 -- red or blocking, rounds left --> FIX[Fix round: gate failure<br/>+ verify report together] --> P3
         P3 -- not converging / out of rounds --> GATE1
         P3 -- spec wrong --> GATE1
@@ -81,7 +87,7 @@ flowchart TD
 | Path | Contents |
 |---|---|
 | [`SKILL.md`](SKILL.md) | Skill definition: preflight, root resolution, the 3-phase workflow, guardrails. |
-| [`AUTONOMOUS-ORCHESTRATION.md`](AUTONOMOUS-ORCHESTRATION.md) | Operational rules for the autonomous run: phases, slots, dispatch groups, checker loops, model/effort routing, bug triage, initiatives. |
+| [`AUTONOMOUS-ORCHESTRATION.md`](AUTONOMOUS-ORCHESTRATION.md) | Operational rules for the autonomous run: phases, slots, units, checker loops, model/effort routing, bug triage, initiatives. |
 | [`scripts/run-change`](scripts/run-change) | Mechanical engine: slots, workspaces/worktrees, gates, merge lane, state and session-log bookkeeping. |
 | [`scripts/lib.sh`](scripts/lib.sh) | Shared helpers: store/registry lookups, state-file format, model routing, project-skill stage mapping, local-vs-external guard. |
 | [`tests/run.sh`](tests/run.sh) | Black-box tests for `run-change`, via its CLI only. |
@@ -174,9 +180,12 @@ For read-only discovery with no artifacts written:
 2. **Trunk preflight** — before any change opens: `gate run --mode full --trunk` runs
    `gate_full` against the trunk ref in a temporary worktree. Red, or `gate_full`
    unconfigured, stops here; no change is opened and no state is written.
-3. **Autonomous run** — Propose (with critique) → Apply → Check + Verify (concurrent) →
+3. **Autonomous run** — Propose (with critique) → Apply (split into units, each in its own
+   worktree/branch with a check-first loop capped at 5 iterations, reviewed by a critic one
+   tier above the proposer, merged in dependency order) → Check + Verify (concurrent) →
    Archive → Merge lane, with fix rounds and tier escalation handled automatically. No
-   approval between phases. The merge lane reruns the full gate only when merging trunk
+   approval between phases. `parallel: false` runs the change as one unit instead, a
+   single-worker baseline. The merge lane reruns the full gate only when merging trunk
    changed the tree the gate already passed on.
 4. **Manual task check** (conditional, before Archive) — if the change's tasks.md still
    has unchecked tasks when Verify and the full gate pass, action `gate2-manual` shows the
@@ -210,6 +219,8 @@ Orchestration settings live only in the resolved root's `openspec/config.yaml`:
 ```yaml
 orchestration:
   concurrency: 2                     # max concurrent changes for this project
+  unit_concurrency: 3                # max concurrent units within one change (else concurrency)
+  parallel: true                     # false runs each change as one unit (single-worker baseline)
   gate_quick: "npm run lint && npm run typecheck"
   gate_full: "npm test && npx knip"  # must include a dead-code pass
   model_mechanical: claude-haiku-4-5-20251001   # optional overrides
@@ -223,9 +234,11 @@ orchestration:
 ```
 
 `model_*` are optional; unset tiers fall back to the default tier→model table
-(`scripts/run-change model get`). `stage_skills` is optional: `plan` accepts at most one
-skill and replaces the deep-tier drafter when set; `critic`/`test` accept a list and stack
-on top of the built-in checker. See
+(`scripts/run-change model get`). `unit_concurrency` and `parallel` are optional too —
+`unit_concurrency` defaults to `concurrency`, and `parallel` defaults to `true`; a change's
+own `parallel` state field overrides the store default. `stage_skills` is optional: `plan`
+accepts at most one skill and replaces the deep-tier drafter when set; `critic`/`test`
+accept a list and stack on top of the built-in checker. See
 [`docs/proposals/skill-stage-mapping.md`](docs/proposals/skill-stage-mapping.md).
 
 ### Tests

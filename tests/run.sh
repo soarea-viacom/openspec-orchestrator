@@ -43,6 +43,19 @@ check_out() { # check_out <desc> <expected-substring> <cmd...>
   local out; out="$("$@" 2>&1)" || { echo "FAIL $desc (exit)"; fails=$((fails+1)); return; }
   case "$out" in *"$want"*) echo "ok   $desc" ;; *) echo "FAIL $desc (got: $out)"; fails=$((fails+1)) ;; esac
 }
+check_line() { # check_line <desc> <expected-exact-line> <cmd...> -- asserts
+  # one of the command's output lines equals <expected-exact-line> exactly,
+  # so a substring like "ready: " cannot pass against "ready: b".
+  local desc="$1" want="$2"; shift 2
+  local out; out="$("$@" 2>&1)" || { echo "FAIL $desc (exit)"; fails=$((fails+1)); return; }
+  local line found=""
+  while IFS= read -r line; do
+    [ "$line" = "$want" ] && { found=1; break; }
+  done <<EOF_LINES
+$out
+EOF_LINES
+  if [ -n "$found" ]; then echo "ok   $desc"; else echo "FAIL $desc (got: $out)"; fails=$((fails+1)); fi
+}
 
 # syntax first: a parse error would make every check below fail for the
 # same reason, so stop here instead of drowning it in noise.
@@ -272,9 +285,16 @@ $RC state set --store teststore --name feat-next last_critique_result clean
 check_out "next: second round critique clean -> gate0 again" "action: gate0" $N
 $RC state set --store teststore --name feat-next phase awaiting-acceptance acceptance accepted
 check_out "next: human accepts -> apply" "action: apply" $N
+check_out "next: accept is tier none" "tier: none" $N
+check_out "next: accept model is -" "model: -" $N
 check_out "next: accept sets phase applying" "set_phase: applying" $N
 $RC state set --store teststore --name feat-next phase applying acceptance ""
-check_out "next: applying -> apply then checking" "set_phase: checking" $N
+check_out "next: applying with no units -> split at deep (full, parallel)" "action: split" $N
+check_out "next: split tier is deep" "tier: deep" $N
+out="$($N)"
+case "$out" in *"running:"*) echo "FAIL next: split prints no running: line (got: $out)"; fails=$((fails+1)) ;; *) echo "ok   next: split prints no running: line" ;; esac
+# the units lifecycle itself is exercised in its own section below; jump
+# this change straight to checking to keep driving the rest of the ladder
 $RC state set --store teststore --name feat-next phase checking
 check_out "next: checking with no gate result -> check" "action: check" $N
 check_out "next: check also dispatches verify concurrently" "also: verify" $N
@@ -550,6 +570,667 @@ mkdir -p "$STORE/openspec/changes/feat-notasksmd"
 $RC state init --store teststore --name feat-notasksmd
 check_out "tasks open without tasks.md reports it" "no tasks.md for feat-notasksmd" $RC tasks open --store teststore --name feat-notasksmd
 check_out "tasks open without tasks.md records 0" "manual_tasks_open: 0" $RC state get --store teststore --name feat-notasksmd
+
+# =====================================================================
+# parallel-units: split recorded in state, units_check
+# =====================================================================
+$RC state init --store teststore --name feat-units
+check_out "state init has empty units fields" 'units: ""' $RC state get --store teststore --name feat-units
+check_out "state init has empty unit_deps" 'unit_deps: ""' $RC state get --store teststore --name feat-units
+check_out "state init has empty unit_tasks" 'unit_tasks: ""' $RC state get --store teststore --name feat-units
+check_out "state init has empty ui_units" 'ui_units: ""' $RC state get --store teststore --name feat-units
+check_out "state init has empty parallel" 'parallel: ""' $RC state get --store teststore --name feat-units
+
+$RC state set --store teststore --name feat-units seams "s=a.js,b.js"
+$RC state set --store teststore --name feat-units units "a=a.js;b=b.js" unit_deps "a=b;b=a"
+cycle_out="$($RC units check --store teststore --name feat-units 2>&1; true)"
+case "$cycle_out" in *a*) echo "ok   units check: cycle names node a" ;; *) echo "FAIL units check: cycle names node a (got: $cycle_out)"; fails=$((fails+1)) ;; esac
+case "$cycle_out" in *b*) echo "ok   units check: cycle names node b" ;; *) echo "FAIL units check: cycle names node b (got: $cycle_out)"; fails=$((fails+1)) ;; esac
+check "units check: cycle exits non-zero" bash -c "! $RC units check --store teststore --name feat-units >/dev/null 2>&1"
+
+$RC state set --store teststore --name feat-units units "a=x.js;b=x.js" unit_deps ""
+$RC state set --store teststore --name feat-units seams "s=x.js"
+check_out "units check: unordered overlap rejected" "no dep path" bash -c "$RC units check --store teststore --name feat-units 2>&1; true"
+$RC state set --store teststore --name feat-units unit_deps "b=a"
+check "units check: overlap ok once ordered by a dep" $RC units check --store teststore --name feat-units
+
+$RC state set --store teststore --name feat-units units "a=x.js,y.js" unit_deps "" seams "s=x.js"
+check_out "units check: file outside seams named" "y.js" bash -c "$RC units check --store teststore --name feat-units 2>&1; true"
+
+$RC state set --store teststore --name feat-units units "A_b=x.js" seams "s=x.js"
+check_out "units check: bad kebab-case name rejected" "bad unit name" bash -c "$RC units check --store teststore --name feat-units 2>&1; true"
+
+$RC state set --store teststore --name feat-units units "a=x.js;b=y.js" unit_deps "" seams "s=x.js,y.js" unit_tasks "a=1.1;b=1.1"
+check_out "units check: task id in two units rejected" "task '1.1'" bash -c "$RC units check --store teststore --name feat-units 2>&1; true"
+
+mkdir -p "$STORE/openspec/changes/feat-units"
+cat > "$STORE/openspec/changes/feat-units/tasks.md" <<'EOF'
+# Tasks
+- [ ] 1.1 do thing
+- [ ] 1.2 another thing
+EOF
+$RC state set --store teststore --name feat-units units "a=x.js" unit_deps "" seams "s=x.js,y.js" unit_tasks "a=1.1"
+check_out "units check CLI: unassigned task printed" "unassigned: 1.2" $RC units check --store teststore --name feat-units
+check "units check CLI exits 0 when the check passes" $RC units check --store teststore --name feat-units
+check "next succeeds on a valid split with no tasks.md anywhere" bash -c "rm -rf '$STORE/openspec/changes/feat-units'; $RC next --store teststore --name feat-units"
+
+check_out "units single --ui builds one unit from the seam union" "units: all=a.js,b.js" bash -c "
+  $RC state set --store teststore --name feat-units seams 's1=a.js;s2=b.js' units '' unit_tasks '' ui_units ''
+  $RC units single --store teststore --name feat-units --ui
+  $RC state get --store teststore --name feat-units
+"
+check_out "units single --ui sets ui_units to all" "ui_units: all" $RC state get --store teststore --name feat-units
+
+# =====================================================================
+# scheduler: units next (ready/running/capacity/dep gating/concurrency)
+# =====================================================================
+$RC state init --store teststore --name feat-sched
+$RC state set --store teststore --name feat-sched seams "s=a.js,b.js,c.js" units "c=c.js;a=a.js;b=b.js" unit_deps ""
+check_out "units next: ready in units field order, capacity 2" "ready: c a" $RC units next --store teststore --name feat-sched
+udirS="$STORE/.orchestration/state/feat-sched.units"
+mkdir -p "$udirS"
+cat > "$udirS/c.yaml" <<'EOF'
+status: running
+iterations: 0
+EOF
+check_out "units next: running unit consumes capacity" "ready: a" $RC units next --store teststore --name feat-sched
+check_out "units next: running unit listed" "running: c" $RC units next --store teststore --name feat-sched
+cat > "$udirS/a.yaml" <<'EOF'
+status: reviewing
+iterations: 1
+EOF
+cat > "$udirS/b.yaml" <<'EOF'
+status: running
+iterations: 0
+EOF
+check_line "units next: review+running hold both slots -> empty ready" "ready: " $RC units next --store teststore --name feat-sched
+check_out "units next: capacity exhausted" "capacity: 0" $RC units next --store teststore --name feat-sched
+cat > "$udirS/a.yaml" <<'EOF'
+status: resolving
+iterations: 1
+EOF
+check_out "units next: resolving also holds a slot" "capacity: 0" $RC units next --store teststore --name feat-sched
+
+$RC state init --store teststore --name feat-dep
+$RC state set --store teststore --name feat-dep seams "s=a.js,b.js" units "a=a.js;b=b.js" unit_deps "b=a"
+check_line "units next: dep gating — dependent not ready" "ready: a" $RC units next --store teststore --name feat-dep
+udirD="$STORE/.orchestration/state/feat-dep.units"
+mkdir -p "$udirD"
+cat > "$udirD/a.yaml" <<'EOF'
+status: reviewed
+iterations: 1
+EOF
+check_line "units next: dep reviewed but not merged -> still not ready" "ready: " $RC units next --store teststore --name feat-dep
+cat > "$udirD/a.yaml" <<'EOF'
+status: merged
+iterations: 1
+EOF
+check_out "units next: dep merged -> dependent ready" "ready: b" $RC units next --store teststore --name feat-dep
+
+mkdir -p "$TMP/store3/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  teststore3:
+    local_path: $TMP/store3
+EOF
+cat > "$TMP/store3/openspec/config.yaml" <<'EOF'
+orchestration:
+  concurrency: 1
+  unit_concurrency: 3
+  gate_quick: "echo QUICK-OK in $PWD"
+  gate_full: "echo FULL-OK in $PWD"
+EOF
+$RC state init --store teststore3 --name feat-cap3
+$RC state set --store teststore3 --name feat-cap3 seams "s=a.js,b.js,c.js" units "a=a.js;b=b.js;c=c.js" unit_deps ""
+check_out "unit_concurrency overrides concurrency" "ready: a b c" $RC units next --store teststore3 --name feat-cap3
+
+# unit_concurrency listed BEFORE concurrency must not leak into the
+# change-level slot cap (V3: both awk matches must be anchored to the key)
+mkdir -p "$TMP/store4/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  teststore4:
+    local_path: $TMP/store4
+EOF
+cat > "$TMP/store4/openspec/config.yaml" <<'EOF'
+orchestration:
+  unit_concurrency: 5
+  concurrency: 1
+  gate_quick: "echo QUICK-OK in $PWD"
+  gate_full: "echo FULL-OK in $PWD"
+EOF
+git clone -q "$TMP/origin" "$TMP/project4"
+s4="$($RC slot acquire --store teststore4 --project "$TMP/project4")"
+check_out "unit_concurrency listed first does not raise the change-level cap" "no free slot (cap=1)" bash -c "$RC slot acquire --store teststore4 --project '$TMP/project4' 2>&1; true"
+$RC slot release --store teststore4 --slot "$s4"
+$RC state init --store teststore4 --name feat-cap4
+$RC state set --store teststore4 --name feat-cap4 seams "s=a.js,b.js,c.js" units "a=a.js;b=b.js;c=c.js" unit_deps ""
+check_out "unit_concurrency still read correctly when listed first" "ready: a b c" $RC units next --store teststore4 --name feat-cap4
+
+# units list: prints "<u> <status> <iterations>", pending when no unit file
+check_line "units list: created unit shows its status and iterations" "c running 0" $RC units list --store teststore --name feat-sched
+check_line "units list: unit with no file shows pending 0" "b pending 0" $RC units list --store teststore3 --name feat-cap3
+
+# =====================================================================
+# units merge-order
+# =====================================================================
+$RC state init --store teststore --name feat-order
+$RC state set --store teststore --name feat-order seams "s=a.js,b.js,c.js" units "c=c.js;b=b.js;a=a.js" unit_deps "c=a;b=a"
+check_out "units merge-order: deps before dependents, ties by field order" "a c b" $RC units merge-order --store teststore --name feat-order
+$RC state set --store teststore --name feat-order unit_deps "a=b;b=a"
+check_out "units merge-order: cycle errors" "cycle" bash -c "$RC units merge-order --store teststore --name feat-order 2>&1; true"
+
+# =====================================================================
+# per-unit worktree + branch lifecycle
+# =====================================================================
+UPROJECT="$TMP/uproject"
+git init -q -b main "$UPROJECT"
+echo one > "$UPROJECT/x.js"; echo two > "$UPROJECT/y.js"
+git -C "$UPROJECT" add -A && git -C "$UPROJECT" commit -qm init
+
+$RC state init --store teststore --name feat-uw
+$RC state set --store teststore --name feat-uw seams "s=x.js,y.js,z.js" units "a=x.js;b=y.js;c=z.js" unit_deps "b=a"
+$RC workspace create --store teststore --project "$UPROJECT" --name feat-uw >/dev/null 2>&1
+
+check_out "unit create: dep not merged refused" "not merged" bash -c "$RC unit create --store teststore --project '$UPROJECT' --name feat-uw --unit b 2>&1; true"
+check "unit create: dep not merged creates no branch" bash -c "! git -C '$UPROJECT' rev-parse --verify -q change/feat-uw.b"
+
+uwt="$($RC unit create --store teststore --project "$UPROJECT" --name feat-uw --unit a)"
+check "unit create: worktree exists at the expected path" test "$uwt" = "$STORE/.orchestration/workspaces/feat-uw.a"
+check "unit create: branch exists" git -C "$UPROJECT" rev-parse --verify -q change/feat-uw.a
+check_out "unit create: unit file has status running" "status: running" $RC unit get --store teststore --name feat-uw --unit a
+basesha="$(git -C "$UPROJECT" rev-parse change/feat-uw)"
+check_out "unit create: base equals change branch tip" "base: $basesha" $RC unit get --store teststore --name feat-uw --unit a
+
+echo dirty > "$STORE/.orchestration/workspaces/feat-uw/dirty.txt"
+check_out "unit create: dirty change worktree refused" "uncommitted" bash -c "$RC unit create --store teststore --project '$UPROJECT' --name feat-uw --unit c 2>&1; true"
+rm -f "$STORE/.orchestration/workspaces/feat-uw/dirty.txt"
+check "unit create: dirty-worktree refusal created no branch" bash -c "! git -C '$UPROJECT' rev-parse --verify -q change/feat-uw.c"
+
+check_out "unit create: second create on a running unit refused" "already exists" bash -c "$RC unit create --store teststore --project '$UPROJECT' --name feat-uw --unit a 2>&1; true"
+
+$RC unit remove --store teststore --project "$UPROJECT" --name feat-uw --unit a
+check "unit remove: worktree gone" test ! -e "$uwt"
+check "unit remove: branch gone" bash -c "! git -C '$UPROJECT' rev-parse --verify -q change/feat-uw.a"
+# unit remove leaves the unit's status file alone (status unchanged) — drop
+# it here to simulate a never-created unit for the next (workspace remove) check
+rm -f "$STORE/.orchestration/state/feat-uw.units/a.yaml"
+
+uwt2="$($RC unit create --store teststore --project "$UPROJECT" --name feat-uw --unit a)"
+$RC workspace remove --store teststore --project "$UPROJECT" --name feat-uw
+check "workspace remove: no change/<name>.* branch remains" bash -c "[ -z \"\$(git -C '$UPROJECT' branch --list 'change/feat-uw.*')\" ]"
+check "workspace remove: unit worktree gone too" test ! -e "$uwt2"
+rm -f "$STORE/.orchestration/state/feat-uw.units/a.yaml"
+
+# V6: a unit whose worktree dir is already gone (interrupted unit remove, a
+# manual prune) must still lose its branch via workspace remove — derived
+# from the units field through workspace_path, not from scanning dirs.
+$RC workspace create --store teststore --project "$UPROJECT" --name feat-uw >/dev/null 2>&1
+uwt3="$($RC unit create --store teststore --project "$UPROJECT" --name feat-uw --unit a)"
+git -C "$UPROJECT" worktree remove "$uwt3" --force
+check "V6 setup: unit a worktree dir is gone" test ! -e "$uwt3"
+check "V6 setup: unit a branch still exists" git -C "$UPROJECT" rev-parse --verify -q change/feat-uw.a
+$RC workspace remove --store teststore --project "$UPROJECT" --name feat-uw
+check "workspace remove: unit branch gone even though its worktree dir was already gone" bash -c "! git -C '$UPROJECT' rev-parse --verify -q change/feat-uw.a"
+rm -f "$STORE/.orchestration/state/feat-uw.units/a.yaml"
+
+# gate run --unit: runs in the unit worktree, never writes gate_tree
+$RC workspace create --store teststore --project "$UPROJECT" --name feat-uw >/dev/null 2>&1
+uwt="$($RC unit create --store teststore --project "$UPROJECT" --name feat-uw --unit a)"
+check_out "gate run --unit runs in the unit worktree" "$uwt" $RC gate run --store teststore --project "$UPROJECT" --name feat-uw --unit a --mode full
+check_out "gate run --unit leaves gate_tree alone" 'gate_tree: ""' $RC state get --store teststore --name feat-uw
+
+# unit checks-done / unit iterate gating
+lines_before="$($RC session list --store teststore --name feat-uw 2>&1 | wc -l)"
+check_out "unit iterate before checks-done is refused" "checks-done" bash -c "$RC unit iterate --store teststore --project '$UPROJECT' --name feat-uw --unit a 2>&1; true"
+lines_after="$($RC session list --store teststore --name feat-uw 2>&1 | wc -l)"
+check "a refused iterate logs nothing" test "$lines_before" -eq "$lines_after"
+check_out "checks-done at base is refused" "still equals its base" bash -c "$RC unit checks-done --store teststore --project '$UPROJECT' --name feat-uw --unit a 2>&1; true"
+echo check > "$uwt/a.check.js"
+git -C "$uwt" add -A && git -C "$uwt" commit -qm "add checks for unit a"
+$RC unit checks-done --store teststore --project "$UPROJECT" --name feat-uw --unit a
+headsha="$(git -C "$uwt" rev-parse HEAD)"
+check_out "checks-done records HEAD as checks_commit" "checks_commit: $headsha" $RC unit get --store teststore --name feat-uw --unit a
+
+# =====================================================================
+# unit iterate: engine-run checks, capped, session-logged
+# =====================================================================
+mkdir -p "$TMP/storeu1/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  storeu1:
+    local_path: $TMP/storeu1
+EOF
+cat > "$TMP/storeu1/openspec/config.yaml" <<'EOF'
+orchestration:
+  concurrency: 2
+  unit_concurrency: 2
+  gate_quick: 'test -f OK && { [ -z "$UNIT_SCREENSHOT" ] || touch "$UNIT_SCREENSHOT"; }'
+  gate_full: "echo FULL-OK in $PWD"
+EOF
+UPROJECT1="$TMP/uproject1"
+git init -q -b main "$UPROJECT1"
+echo one > "$UPROJECT1/a.js"
+git -C "$UPROJECT1" add -A && git -C "$UPROJECT1" commit -qm init
+
+$RC state init --store storeu1 --name feat-iter
+$RC state set --store storeu1 --name feat-iter seams "s=a.js" units "a=a.js" unit_deps "" ui_units "a"
+$RC workspace create --store storeu1 --project "$UPROJECT1" --name feat-iter >/dev/null 2>&1
+iwt="$($RC unit create --store storeu1 --project "$UPROJECT1" --name feat-iter --unit a)"
+echo check > "$iwt/a.test.js"; git -C "$iwt" add -A && git -C "$iwt" commit -qm checks
+$RC unit checks-done --store storeu1 --project "$UPROJECT1" --name feat-iter --unit a
+
+for i in 1 2 3 4; do
+  check "unit iterate #$i returns red (no OK file yet)" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a >/dev/null 2>&1"
+done
+n_red="$($RC session list --store storeu1 --name feat-iter | grep -c 'checks=red')"
+check "exactly 4 red iterate entries logged" test "$n_red" = 4
+touch "$iwt/OK"
+check "5th iterate returns green" $RC unit iterate --store storeu1 --project "$UPROJECT1" --name feat-iter --unit a
+check_out "unit status is green" "status: green" $RC unit get --store storeu1 --name feat-iter --unit a
+check_out "screenshot recorded as the absolute iteration-5 path" "$TMP/storeu1/.orchestration/state/feat-iter.units/a/screenshot-5.png" $RC unit get --store storeu1 --name feat-iter --unit a
+check "recorded screenshot file exists" test -f "$TMP/storeu1/.orchestration/state/feat-iter.units/a/screenshot-5.png"
+n_green="$($RC session list --store storeu1 --name feat-iter | grep -c 'checks=green')"
+check "exactly 1 green iterate entry logged" test "$n_green" = 1
+iters_log="$($RC session list --store storeu1 --name feat-iter | grep -o 'iteration=[0-9]*' | sort -u | tr '\n' ' ')"
+check "iterations 1..5 all logged, once each" test "$iters_log" = "iteration=1 iteration=2 iteration=3 iteration=4 iteration=5 "
+check_out "iterate entries carry tier standard" "tier=standard" $RC session list --store storeu1 --name feat-iter
+nlines_before="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -d ' ')"
+check "6th iterate is refused" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a >/dev/null 2>&1"
+check_out "6th iterate names the iteration cap" "iteration cap" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a 2>&1; true"
+nlines_after="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -d ' ')"
+check "6th iterate appends no log entry" test "$nlines_before" = "$nlines_after"
+check_out "unit status is failed past the cap" "status: failed" $RC unit get --store storeu1 --name feat-iter --unit a
+
+# a non-UI unit red every time ends failed at the cap too
+UPROJECT1B="$TMP/uproject1b"
+git init -q -b main "$UPROJECT1B"
+echo one > "$UPROJECT1B/b.js"
+git -C "$UPROJECT1B" add -A && git -C "$UPROJECT1B" commit -qm init
+$RC state init --store storeu1 --name feat-iter-red
+$RC state set --store storeu1 --name feat-iter-red seams "s=b.js" units "b=b.js" unit_deps ""
+$RC workspace create --store storeu1 --project "$UPROJECT1B" --name feat-iter-red >/dev/null 2>&1
+rwt="$($RC unit create --store storeu1 --project "$UPROJECT1B" --name feat-iter-red --unit b)"
+echo check > "$rwt/b.test.js"; git -C "$rwt" add -A && git -C "$rwt" commit -qm checks
+$RC unit checks-done --store storeu1 --project "$UPROJECT1B" --name feat-iter-red --unit b
+for i in 1 2 3 4 5; do
+  $RC unit iterate --store storeu1 --project "$UPROJECT1B" --name feat-iter-red --unit b >/dev/null 2>&1 || true
+done
+check_out "non-UI unit red at the cap -> failed" "status: failed" $RC unit get --store storeu1 --name feat-iter-red --unit b
+
+# unit-revise round trip (V2): blocking critique -> orchestrator clears it
+# (status running, critique "") -> iterate green again -> unit-critique
+UPROJECT1C="$TMP/uproject1c"
+git init -q -b main "$UPROJECT1C"
+echo one > "$UPROJECT1C/c.js"
+git -C "$UPROJECT1C" add -A && git -C "$UPROJECT1C" commit -qm init
+$RC state init --store storeu1 --name feat-revise-flow
+$RC state set --store storeu1 --name feat-revise-flow phase applying seams "s=c.js" units "c=c.js" unit_deps ""
+$RC workspace create --store storeu1 --project "$UPROJECT1C" --name feat-revise-flow >/dev/null 2>&1
+cwt1="$($RC unit create --store storeu1 --project "$UPROJECT1C" --name feat-revise-flow --unit c)"
+echo check > "$cwt1/c.test.js"; git -C "$cwt1" add -A && git -C "$cwt1" commit -qm checks
+$RC unit checks-done --store storeu1 --project "$UPROJECT1C" --name feat-revise-flow --unit c
+touch "$cwt1/OK"
+check "unit-revise flow: first iterate is green" $RC unit iterate --store storeu1 --project "$UPROJECT1C" --name feat-revise-flow --unit c
+$RC unit set --store storeu1 --name feat-revise-flow --unit c status reviewing critique "blocking:1"
+check_out "unit-revise flow: blocking critique under the cap -> unit-revise" "action: unit-revise" $RC next --store storeu1 --name feat-revise-flow
+$RC unit set --store storeu1 --name feat-revise-flow --unit c status running critique ""
+check_out "unit-revise flow: after clearing, status is running critique empty" "status: running" $RC unit get --store storeu1 --name feat-revise-flow --unit c
+check_line "unit-revise flow: critique field cleared" "critique: " $RC unit get --store storeu1 --name feat-revise-flow --unit c
+check "unit-revise flow: re-dispatched iterate goes green" $RC unit iterate --store storeu1 --project "$UPROJECT1C" --name feat-revise-flow --unit c
+check_out "unit-revise flow: green with critique cleared -> unit-critique" "action: unit-critique" $RC next --store storeu1 --name feat-revise-flow
+
+# UI green needs the screenshot: a gate_quick that exits 0 but never writes it
+mkdir -p "$TMP/storeu2/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  storeu2:
+    local_path: $TMP/storeu2
+EOF
+cat > "$TMP/storeu2/openspec/config.yaml" <<'EOF'
+orchestration:
+  concurrency: 1
+  gate_quick: "exit 0"
+  gate_full: "exit 0"
+EOF
+UPROJECT2="$TMP/uproject2"
+git init -q -b main "$UPROJECT2"
+echo one > "$UPROJECT2/a.js"
+git -C "$UPROJECT2" add -A && git -C "$UPROJECT2" commit -qm init
+$RC state init --store storeu2 --name feat-nopng
+$RC state set --store storeu2 --name feat-nopng seams "s=a.js" units "a=a.js" unit_deps "" ui_units "a"
+$RC workspace create --store storeu2 --project "$UPROJECT2" --name feat-nopng >/dev/null 2>&1
+nwt="$($RC unit create --store storeu2 --project "$UPROJECT2" --name feat-nopng --unit a)"
+echo check > "$nwt/a.test.js"; git -C "$nwt" add -A && git -C "$nwt" commit -qm checks
+$RC unit checks-done --store storeu2 --project "$UPROJECT2" --name feat-nopng --unit a
+check "UI unit with a gate_quick that writes no PNG returns red" bash -c "! $RC unit iterate --store storeu2 --project '$UPROJECT2' --name feat-nopng --unit a >/dev/null 2>&1"
+check_out "that iterate is logged red" "checks=red" $RC session list --store storeu2 --name feat-nopng
+check "its status is not green" bash -c "! grep -q '^status: green' <($RC unit get --store storeu2 --name feat-nopng --unit a)"
+
+# only the owning unit's test writes the screenshot
+mkdir -p "$TMP/storeu3/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  storeu3:
+    local_path: $TMP/storeu3
+EOF
+cat > "$TMP/storeu3/openspec/config.yaml" <<'EOF'
+orchestration:
+  concurrency: 2
+  unit_concurrency: 2
+  gate_quick: '[ "$UNIT_NAME" != a ] || touch "$UNIT_SCREENSHOT"'
+  gate_full: "exit 0"
+EOF
+UPROJECT3="$TMP/uproject3"
+git init -q -b main "$UPROJECT3"
+echo one > "$UPROJECT3/a.js"; echo two > "$UPROJECT3/b.js"
+git -C "$UPROJECT3" add -A && git -C "$UPROJECT3" commit -qm init
+$RC state init --store storeu3 --name feat-owner
+$RC state set --store storeu3 --name feat-owner seams "s=a.js,b.js" units "a=a.js;b=b.js" unit_deps "" ui_units "a,b"
+$RC workspace create --store storeu3 --project "$UPROJECT3" --name feat-owner >/dev/null 2>&1
+owt_a="$($RC unit create --store storeu3 --project "$UPROJECT3" --name feat-owner --unit a)"
+owt_b="$($RC unit create --store storeu3 --project "$UPROJECT3" --name feat-owner --unit b)"
+echo c > "$owt_a/a.test.js"; git -C "$owt_a" add -A && git -C "$owt_a" commit -qm checks
+echo c > "$owt_b/b.test.js"; git -C "$owt_b" add -A && git -C "$owt_b" commit -qm checks
+$RC unit checks-done --store storeu3 --project "$UPROJECT3" --name feat-owner --unit a
+$RC unit checks-done --store storeu3 --project "$UPROJECT3" --name feat-owner --unit b
+check "owner store: non-owning unit b returns red" bash -c "! $RC unit iterate --store storeu3 --project '$UPROJECT3' --name feat-owner --unit b >/dev/null 2>&1"
+check "owner store: unit b records no screenshot" bash -c "! grep -q '^screenshot: /' <($RC unit get --store storeu3 --name feat-owner --unit b)"
+check "owner store: owning unit a returns green" $RC unit iterate --store storeu3 --project "$UPROJECT3" --name feat-owner --unit a
+check_out "owner store: unit a status green" "status: green" $RC unit get --store storeu3 --name feat-owner --unit a
+
+# =====================================================================
+# critic over green units with screenshots
+# =====================================================================
+check_out "units ready-for-review lists the green unit" "unit: a" $RC units ready-for-review --store storeu3 --name feat-owner
+out_rfr="$($RC units ready-for-review --store storeu3 --name feat-owner)"
+case "$out_rfr" in
+  *"unit: b"*) echo "FAIL units ready-for-review includes the non-green unit b"; fails=$((fails+1)) ;;
+  *) echo "ok   units ready-for-review excludes the non-green unit b" ;;
+esac
+check_out "units ready-for-review prints the absolute screenshot path" "$TMP/storeu3/.orchestration/state/feat-owner.units/a/screenshot-1.png" $RC units ready-for-review --store storeu3 --name feat-owner
+
+critique_dir="$TMP/storeu3/.orchestration/state/feat-owner.units"
+shotpath="$critique_dir/a/screenshot-1.png"
+echo "basename only: screenshot-1.png" > "$critique_dir/a.critique.md"
+check_out "unit set critique: report with only the basename is refused" "does not contain" bash -c "$RC unit set --store storeu3 --name feat-owner --unit a critique clean 2>&1; true"
+printf 'looks correct: %s\n' "$shotpath" > "$critique_dir/a.critique.md"
+check "unit set critique: report with the absolute path is accepted" $RC unit set --store storeu3 --name feat-owner --unit a critique clean
+check_out "unit critique recorded" "critique: clean" $RC unit get --store storeu3 --name feat-owner --unit a
+
+$RC session append --store storeu3 --name feat-owner role worker phase proposed tier deep model claude-opus-5-custom transcript_id u1
+# avoid piping a live process into `head`: with pipefail the writer's SIGPIPE
+# (once head closes the pipe after one line) would kill this whole script
+out1_full="$($RC model critic --store storeu3 --name feat-owner)"; out1="${out1_full%%$'\n'*}"
+out2_full="$($RC model critic --store storeu3 --name feat-owner --unit a)"; out2="${out2_full%%$'\n'*}"
+check "model critic --unit line 1 equals model critic line 1" test "$out1" = "$out2"
+check_out "model critic --unit contract mentions checks_commit" "checks_commit" $RC model critic --store storeu3 --name feat-owner --unit a
+check_out "model critic --unit contract mentions screenshot" "screenshot" $RC model critic --store storeu3 --name feat-owner --unit a
+check_out "model critic --unit contract mentions input:" "input:" $RC model critic --store storeu3 --name feat-owner --unit a
+
+# =====================================================================
+# unit merge: dependency-ordered, scope-checked, conflict handling
+# =====================================================================
+MPROJECT="$TMP/mproject"
+git init -q -b main "$MPROJECT"
+echo one > "$MPROJECT/a.js"; echo two > "$MPROJECT/b.js"
+git -C "$MPROJECT" add -A && git -C "$MPROJECT" commit -qm init
+
+$RC state init --store teststore --name feat-merge
+mkdir -p "$STORE/openspec/changes/feat-merge"
+cat > "$STORE/openspec/changes/feat-merge/tasks.md" <<'EOF'
+# Tasks
+- [ ] 1.1 unit a task
+EOF
+$RC state set --store teststore --name feat-merge seams "s=a.js,b.js" units "a=a.js" unit_deps "" unit_tasks "a=1.1"
+$RC workspace create --store teststore --project "$MPROJECT" --name feat-merge >/dev/null 2>&1
+mwt="$($RC unit create --store teststore --project "$MPROJECT" --name feat-merge --unit a)"
+echo changed > "$mwt/a.js"; git -C "$mwt" add -A && git -C "$mwt" commit -qm "implement a"
+$RC unit set --store teststore --name feat-merge --unit a status reviewed
+$RC unit merge --store teststore --project "$MPROJECT" --name feat-merge --unit a
+check "merge: change branch has the unit's commit" bash -c "git -C '$MPROJECT' log change/feat-merge --oneline | grep -q 'implement a'"
+check_out "merge: task ticked in tasks.md" "[x] 1.1 unit a task" cat "$STORE/openspec/changes/feat-merge/tasks.md"
+check "merge: unit worktree removed" test ! -e "$mwt"
+check "merge: unit branch removed" bash -c "! git -C '$MPROJECT' rev-parse --verify -q change/feat-merge.a"
+check_out "merge: status merged" "status: merged" $RC unit get --store teststore --name feat-merge --unit a
+check_out "merge: event=merge result=merged logged" "event=merge result=merged" $RC session list --store teststore --name feat-merge
+
+# out-of-scope file refused, change branch unchanged
+$RC state init --store teststore --name feat-scope
+$RC state set --store teststore --name feat-scope seams "s=a.js,b.js" units "a=a.js" unit_deps ""
+$RC workspace create --store teststore --project "$MPROJECT" --name feat-scope >/dev/null 2>&1
+swt="$($RC unit create --store teststore --project "$MPROJECT" --name feat-scope --unit a)"
+echo x > "$swt/b.js"; git -C "$swt" add -A && git -C "$swt" commit -qm "touches out-of-scope file"
+$RC unit set --store teststore --name feat-scope --unit a status reviewed
+before_tip="$(git -C "$MPROJECT" rev-parse change/feat-scope)"
+check_out "merge: out-of-scope file named and refused" "b.js" bash -c "$RC unit merge --store teststore --project '$MPROJECT' --name feat-scope --unit a 2>&1; true"
+check "merge: out-of-scope refusal leaves change branch unchanged" test "$before_tip" = "$(git -C "$MPROJECT" rev-parse change/feat-scope)"
+$RC workspace remove --store teststore --project "$MPROJECT" --name feat-scope
+
+# dep not merged refused (no real worktree needed: the dep check is state-only)
+$RC state init --store teststore --name feat-mdep
+$RC state set --store teststore --name feat-mdep seams "s=a.js,b.js" units "a=a.js;b=b.js" unit_deps "b=a"
+$RC workspace create --store teststore --project "$MPROJECT" --name feat-mdep >/dev/null 2>&1
+$RC unit create --store teststore --project "$MPROJECT" --name feat-mdep --unit a >/dev/null
+$RC unit set --store teststore --name feat-mdep --unit a status reviewed
+mkdir -p "$STORE/.orchestration/state/feat-mdep.units"
+cat > "$STORE/.orchestration/state/feat-mdep.units/b.yaml" <<'EOF'
+status: reviewed
+EOF
+check_out "merge: dep not merged refused" "not merged" bash -c "$RC unit merge --store teststore --project '$MPROJECT' --name feat-mdep --unit b 2>&1; true"
+$RC workspace remove --store teststore --project "$MPROJECT" --name feat-mdep
+
+# conflict -> conflict; a second conflict -> failed; one event=merge per attempt
+$RC state init --store teststore --name feat-conflict
+$RC state set --store teststore --name feat-conflict seams "s=a.js" units "a=a.js" unit_deps ""
+$RC workspace create --store teststore --project "$MPROJECT" --name feat-conflict >/dev/null 2>&1
+cwt="$($RC unit create --store teststore --project "$MPROJECT" --name feat-conflict --unit a)"
+echo "unit-change" > "$cwt/a.js"; git -C "$cwt" add -A && git -C "$cwt" commit -qm "unit edits a.js"
+chwt="$STORE/.orchestration/workspaces/feat-conflict"
+echo "change-change" > "$chwt/a.js"; git -C "$chwt" add -A && git -C "$chwt" commit -qm "change branch edits a.js too"
+$RC unit set --store teststore --name feat-conflict --unit a status reviewed
+merge1_out="$($RC unit merge --store teststore --project "$MPROJECT" --name feat-conflict --unit a 2>&1; echo "EXIT:$?")"
+check "merge attempt 1 (conflict) exits 3" test "${merge1_out##*EXIT:}" = 3
+case "$merge1_out" in *a.js*) echo "ok   merge attempt 1 prints the conflicting file" ;; *) echo "FAIL merge attempt 1 prints the conflicting file (got: $merge1_out)"; fails=$((fails+1)) ;; esac
+check_out "status after first conflict is 'conflict'" "status: conflict" $RC unit get --store teststore --name feat-conflict --unit a
+$RC unit set --store teststore --name feat-conflict --unit a status resolving
+merge2_out="$($RC unit merge --store teststore --project "$MPROJECT" --name feat-conflict --unit a 2>&1; echo "EXIT:$?")"
+check "merge attempt 2 (second conflict) exits 3" test "${merge2_out##*EXIT:}" = 3
+case "$merge2_out" in *a.js*) echo "ok   merge attempt 2 prints the conflicting file" ;; *) echo "FAIL merge attempt 2 prints the conflicting file (got: $merge2_out)"; fails=$((fails+1)) ;; esac
+check_out "status after second conflict is 'failed'" "status: failed" $RC unit get --store teststore --name feat-conflict --unit a
+n_merge_events="$($RC session list --store teststore --name feat-conflict | grep -c 'event=merge')"
+check "one event=merge entry per rebase attempt (2 total)" test "$n_merge_events" = 2
+
+# a 'resolving' unit whose worktree still has a rebase in progress: unit
+# merge aborts it and fails it outright, regardless of merge_attempts
+$RC state init --store teststore --name feat-unresolved
+$RC state set --store teststore --name feat-unresolved seams "s=a.js" units "a=a.js" unit_deps ""
+$RC workspace create --store teststore --project "$MPROJECT" --name feat-unresolved >/dev/null 2>&1
+uwt2="$($RC unit create --store teststore --project "$MPROJECT" --name feat-unresolved --unit a)"
+echo "unit-change" > "$uwt2/a.js"; git -C "$uwt2" add -A && git -C "$uwt2" commit -qm "unit edits a.js"
+chwt2="$STORE/.orchestration/workspaces/feat-unresolved"
+echo "change-change" > "$chwt2/a.js"; git -C "$chwt2" add -A && git -C "$chwt2" commit -qm "change edits a.js too"
+$RC unit set --store teststore --name feat-unresolved --unit a status resolving
+git -C "$uwt2" rebase change/feat-unresolved >/dev/null 2>&1 || true
+check "merge: unfinished rebase aborts it and fails, exit 3" bash -c "$RC unit merge --store teststore --project '$MPROJECT' --name feat-unresolved --unit a >/dev/null 2>&1; [ \$? -eq 3 ]"
+check_out "status failed regardless of merge_attempts" "status: failed" $RC unit get --store teststore --name feat-unresolved --unit a
+check_out "an event=merge result=failed entry logged" "event=merge result=failed" $RC session list --store teststore --name feat-unresolved
+
+# =====================================================================
+# next_action at applying: the phase=applying action table
+# =====================================================================
+appl_init() { # <name> -- state init + seams/units baseline at phase applying
+  $RC state init --store teststore --name "$1" >/dev/null
+  $RC state set --store teststore --name "$1" phase applying seams "s=a.js,b.js,c.js" units "a=a.js;b=b.js;c=c.js" unit_deps "" >/dev/null
+}
+appl_udir() { echo "$STORE/.orchestration/state/$1.units"; }
+
+appl_init feat-appl-split
+$RC state set --store teststore --name feat-appl-split units ""
+check_out "applying: empty units, full+parallel -> split at deep" "action: split" $RC next --store teststore --name feat-appl-split
+check_out "applying: split tier is deep" "tier: deep" $RC next --store teststore --name feat-appl-split
+out="$($RC next --store teststore --name feat-appl-split)"
+case "$out" in *"running:"*) echo "FAIL applying split prints a running: line"; fails=$((fails+1)) ;; *) echo "ok   applying split prints no running: line" ;; esac
+
+appl_init feat-appl-light
+$RC state set --store teststore --name feat-appl-light lifecycle light units ""
+check_out "applying: light -> split at none (units single)" "action: split" $RC next --store teststore --name feat-appl-light
+check_out "applying: light split is tier none" "tier: none" $RC next --store teststore --name feat-appl-light
+check_out "applying: light split names units single" "units single" $RC next --store teststore --name feat-appl-light
+
+appl_init feat-appl-parallelfalse
+$RC state set --store teststore --name feat-appl-parallelfalse parallel false units ""
+check_out "applying: parallel false -> split at none" "action: split" $RC next --store teststore --name feat-appl-parallelfalse
+check_out "applying: parallel false split is tier none" "tier: none" $RC next --store teststore --name feat-appl-parallelfalse
+
+mkdir -p "$TMP/store-pf/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  store-pf:
+    local_path: $TMP/store-pf
+EOF
+cat > "$TMP/store-pf/openspec/config.yaml" <<'EOF'
+orchestration:
+  concurrency: 2
+  parallel: false
+  gate_quick: "echo QUICK-OK in $PWD"
+  gate_full: "echo FULL-OK in $PWD"
+EOF
+$RC state init --store store-pf --name feat-pf
+$RC state set --store store-pf --name feat-pf phase applying seams "s=a.js" units ""
+check_out "applying: store orchestration.parallel false -> split at none" "tier: none" $RC next --store store-pf --name feat-pf
+
+appl_init feat-appl-badparallel
+$RC state set --store teststore --name feat-appl-badparallel parallel maybe units ""
+check_out "applying: parallel maybe errors" "unknown parallel" bash -c "$RC next --store teststore --name feat-appl-badparallel 2>&1; true"
+
+appl_init feat-appl-checkfail
+$RC state set --store teststore --name feat-appl-checkfail units "a=a.js;b=a.js" unit_deps ""
+check_out "applying: units check failing -> non-zero" "no dep path" bash -c "$RC next --store teststore --name feat-appl-checkfail 2>&1; true"
+
+appl_init feat-appl-failed
+udir="$(appl_udir feat-appl-failed)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: failed
+iterations: 5
+EOF
+check_out "applying: a failed unit -> gate1" "action: gate1" $RC next --store teststore --name feat-appl-failed
+check_out "applying: gate1 for a failed unit names it" "a" $RC next --store teststore --name feat-appl-failed
+
+appl_init feat-appl-conflict
+udir="$(appl_udir feat-appl-conflict)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: conflict
+iterations: 1
+EOF
+check_out "applying: a conflict unit -> merge-conflict" "action: merge-conflict" $RC next --store teststore --name feat-appl-conflict
+check_out "applying: merge-conflict tier is standard" "tier: standard" $RC next --store teststore --name feat-appl-conflict
+check_out "applying: merge-conflict names the unit" "units: a" $RC next --store teststore --name feat-appl-conflict
+
+appl_init feat-appl-revise
+udir="$(appl_udir feat-appl-revise)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: reviewing
+iterations: 2
+critique: blocking:1
+EOF
+check_out "applying: reviewing+blocking under the cap -> unit-revise" "action: unit-revise" $RC next --store teststore --name feat-appl-revise
+cat > "$udir/a.yaml" <<'EOF'
+status: reviewing
+iterations: 5
+critique: blocking:1
+EOF
+check_out "applying: reviewing+blocking at the cap -> gate1" "action: gate1" $RC next --store teststore --name feat-appl-revise
+
+appl_init feat-appl-merge
+$RC state set --store teststore --name feat-appl-merge unit_deps "b=a;c=a"
+udir="$(appl_udir feat-appl-merge)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: merged
+iterations: 5
+EOF
+cat > "$udir/b.yaml" <<'EOF'
+status: reviewed
+iterations: 3
+EOF
+cat > "$udir/c.yaml" <<'EOF'
+status: reviewed
+iterations: 3
+EOF
+check_out "applying: reviewed units with merged deps -> unit-merge" "action: unit-merge" $RC next --store teststore --name feat-appl-merge
+check_out "applying: unit-merge lists units in merge order" "units: b c" $RC next --store teststore --name feat-appl-merge
+
+appl_init feat-appl-critique
+$RC session append --store teststore --name feat-appl-critique role worker phase proposed tier deep model claude-opus-5-plain transcript_id q1
+udir="$(appl_udir feat-appl-critique)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: green
+iterations: 3
+critique: ""
+EOF
+cat > "$udir/b.yaml" <<'EOF'
+status: running
+iterations: 1
+EOF
+check_out "applying: green unit with no critique -> unit-critique" "action: unit-critique" $RC next --store teststore --name feat-appl-critique
+check_out "applying: unit-critique tier is one above a deep proposer" "tier: max" $RC next --store teststore --name feat-appl-critique
+check_out "applying: unit-critique names the green unit" "units: a" $RC next --store teststore --name feat-appl-critique
+check_out "applying: unit-critique still reports the running unit" "running: b" $RC next --store teststore --name feat-appl-critique
+
+appl_init feat-appl-spawn
+check_out "applying: fresh units -> unit-spawn" "action: unit-spawn" $RC next --store teststore --name feat-appl-spawn
+check_out "applying: unit-spawn is tier standard" "tier: standard" $RC next --store teststore --name feat-appl-spawn
+check_out "applying: unit-spawn lists ready units up to capacity (2)" "units: a b" $RC next --store teststore --name feat-appl-spawn
+check_out "applying: unit-spawn running line is empty" "running: " $RC next --store teststore --name feat-appl-spawn
+
+appl_init feat-appl-wait
+udir="$(appl_udir feat-appl-wait)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: running
+iterations: 1
+EOF
+cat > "$udir/b.yaml" <<'EOF'
+status: running
+iterations: 1
+EOF
+check_out "applying: capacity fully held -> wait" "action: wait" $RC next --store teststore --name feat-appl-wait
+check_out "applying: wait reports both running units" "running: a b" $RC next --store teststore --name feat-appl-wait
+
+appl_init feat-appl-done
+udir="$(appl_udir feat-appl-done)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: merged
+EOF
+cat > "$udir/b.yaml" <<'EOF'
+status: merged
+EOF
+cat > "$udir/c.yaml" <<'EOF'
+status: merged
+EOF
+check_out "applying: all merged -> units-merged" "action: units-merged" $RC next --store teststore --name feat-appl-done
+check_out "applying: units-merged sets phase checking" "set_phase: checking" $RC next --store teststore --name feat-appl-done
+
+# =====================================================================
+# status: UNITS column, LAST_TIER ignores trailing entries without tier=
+# =====================================================================
+check_out "status header includes UNITS" "UNITS" $RC status --store teststore
+$RC state init --store teststore --name feat-unitscol
+$RC state set --store teststore --name feat-unitscol seams "s=a.js,b.js" units "a=a.js;b=b.js" unit_deps ""
+mkdir -p "$STORE/.orchestration/state/feat-unitscol.units"
+cat > "$STORE/.orchestration/state/feat-unitscol.units/a.yaml" <<'EOF'
+status: merged
+EOF
+cat > "$STORE/.orchestration/state/feat-unitscol.units/b.yaml" <<'EOF'
+status: running
+EOF
+check_out "status shows 1/2 for one of two units merged" "1/2" $RC status --store teststore
+$RC session append --store teststore --name feat-unitscol role worker phase unit unit a event iterate tier standard model claude-sonnet-5
+$RC session append --store teststore --name feat-unitscol role orchestrator phase unit unit a event merge result merged
+out_status="$($RC status --store teststore)"
+line_unitscol="$(printf '%s\n' "$out_status" | grep feat-unitscol)"
+case "$line_unitscol" in
+  *standard*) echo "ok   LAST_TIER ignores a trailing entry with no tier=" ;;
+  *) echo "FAIL LAST_TIER ignores a trailing entry with no tier= (got: $line_unitscol)"; fails=$((fails+1)) ;;
+esac
+$RC state init --store teststore --name feat-nounits
+case "$($RC status --store teststore | grep feat-nounits)" in
+  *" - "*) echo "ok   status shows - in UNITS for a change without units" ;;
+  *) echo "FAIL status shows - in UNITS for a change without units"; fails=$((fails+1)) ;;
+esac
 
 echo
 [ "$fails" -eq 0 ] && echo "all tests passed" || { echo "$fails test(s) failed"; exit 1; }
