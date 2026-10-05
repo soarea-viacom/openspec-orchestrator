@@ -219,8 +219,8 @@ Orchestration settings live only in the resolved root's `openspec/config.yaml`:
 
 ```yaml
 orchestration:
-  concurrency: 2                     # max concurrent changes for this project
-  unit_concurrency: 3                # max concurrent units within one change (else concurrency)
+  concurrency: 2                     # max concurrent changes for this project (default 2)
+  unit_concurrency: 3                # max concurrent units within one change (default 3)
   parallel: true                     # false runs each change as one unit (single-worker baseline)
   gate_quick: "npm run lint && npm run typecheck"
   gate_full: "npm test && npx knip"  # must include a dead-code pass
@@ -236,7 +236,7 @@ orchestration:
 
 `model_*` are optional; unset tiers fall back to the default tier→model table
 (`scripts/run-change model get`). `unit_concurrency` and `parallel` are optional too —
-`unit_concurrency` defaults to `concurrency`, and `parallel` defaults to `true`; a change's
+`concurrency` defaults to 2, `unit_concurrency` to 3, and `parallel` to `true`; a change's
 own `parallel` state field overrides the store default. `stage_skills` is optional: `plan`
 accepts at most one skill and replaces the deep-tier drafter when set; `critic`/`test`
 accept a list and stack on top of the built-in checker. See

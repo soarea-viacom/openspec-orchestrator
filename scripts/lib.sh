@@ -171,13 +171,15 @@ checker_inputs() {
 }
 
 # concurrency_cap <store-slug> -> N from the store's openspec/config.yaml
-# orchestration.concurrency, default 1.
+# orchestration.concurrency, default 2: parallelism is gated by the
+# disjoint-files check, not by this number, so a cap of 1 only ever
+# serialised changes that could not have conflicted.
 concurrency_cap() {
   local cfg
   cfg="$(store_config "$1")"
   local n
   n="$(awk '/^orchestration:/{f=1;next} f && /^[a-zA-Z]/{exit} f && /^[[:space:]]+concurrency:/{print $2; exit}' "$cfg" 2>/dev/null || true)"
-  echo "${n:-1}"
+  echo "${n:-2}"
 }
 
 gate_command() {
@@ -379,11 +381,7 @@ unit_capacity() {
   local cfg; cfg="$(store_config "$slug")"
   local n
   n="$(awk '/^orchestration:/{f=1;next} f && /^[a-zA-Z]/{exit} f && /unit_concurrency:/{print $2; exit}' "$cfg" 2>/dev/null || true)"
-  if [ -n "$n" ]; then
-    echo "$n"
-    return 0
-  fi
-  concurrency_cap "$slug"
+  echo "${n:-3}"
 }
 
 # parallel_mode <store-slug> <state-file> -> true|false. Empty state field
@@ -850,6 +848,26 @@ unit_logged_tier() {
   [ -n "$t" ] && echo "$t" || unit_tier "$1" "$2" "$3"
 }
 
+# unit_pass_eligible <store-slug> <name> <unit> -> 0 when the unit may be
+# merged without a unit critic: lifecycle light, not a UI unit, a standard
+# leaf, green on its first iteration, no critique recorded. Measured: unit
+# critics over such leaves found nothing, and Verify still reads the whole
+# merged diff. Prints the failing condition on stderr otherwise.
+unit_pass_eligible() {
+  local slug="$1" name="$2" u="$3"
+  local f="$(state_root "$slug")/$name.yaml"
+  local uf; uf="$(unit_state_dir "$slug" "$name")/$u.yaml"
+  [ -f "$uf" ] || { echo "no unit $u for change $name" >&2; return 1; }
+  local lc; lc="$(state_field "$f" lifecycle)"; lc="${lc:-full}"
+  [ "$lc" = light ] || { echo "unit $u: lifecycle is $lc, only light may skip the unit critic" >&2; return 1; }
+  case ",$(state_field "$f" ui_units)," in *",$u,"*) echo "unit $u is a UI unit: its screenshot needs a critic" >&2; return 1 ;; esac
+  [ "$(unit_logged_tier "$slug" "$name" "$u")" = standard ] || { echo "unit $u is a foundation unit (deep): keeps its critic" >&2; return 1; }
+  [ "$(state_field "$uf" status)" = green ] || { echo "unit $u is not green (status: $(state_field "$uf" status))" >&2; return 1; }
+  [ "$(state_field "$uf" iterations)" = 1 ] || { echo "unit $u took $(state_field "$uf" iterations) iterations, not 1" >&2; return 1; }
+  [ -z "$(state_field "$uf" critique)" ] || { echo "unit $u already has a critique" >&2; return 1; }
+  return 0
+}
+
 # unit_critic_pick <store-slug> <name> <unit> -> "<tier> <model>": the unit
 # critic is sized against the unit's own worker, not the proposer.
 unit_critic_pick() {
@@ -1024,6 +1042,13 @@ next_action_applying() {
     [ "$(state_field "$uf" status)" = green ] || continue
     [ -z "$(state_field "$uf" critique)" ] || continue
     green_units="$green_units$u "
+  done
+  for u in $green_units; do
+    unit_pass_eligible "$slug" "$name" "$u" 2>/dev/null || continue
+    _na_emit unit-pass none - "light lifecycle: unit $u is a non-UI standard leaf green on iteration 1 — run unit pass (no critic; Verify still reads the merged diff), then unit merge"
+    printf 'units: %s\n' "$u"
+    printf 'running: %s\n' "$running_line"
+    return 0
   done
   if [ -n "$green_units" ]; then
     # One dispatch per checker tier: a deep foundation unit and a standard

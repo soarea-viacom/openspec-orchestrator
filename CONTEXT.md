@@ -57,8 +57,8 @@
   file.
 - **Scheduler**: `units next` — the units whose deps are all `merged` and
   have no unit file or `status: pending`, in `units` field order, up to the free capacity
-  (`orchestration.unit_concurrency`, else `orchestration.concurrency`,
-  else 1). A unit with status `running`, `reviewing`, `conflict`, or
+  (`orchestration.unit_concurrency`, default 3; the change-level
+  `concurrency` defaults to 2). A unit with status `running`, `reviewing`, `conflict`, or
   `resolving` holds a slot — review and conflict resolution reuse the slot
   the unit already holds rather than freeing it for a new unit to start.
 - **Unit critique**: the critic dispatched over `units ready-for-review`
@@ -183,8 +183,10 @@
   `revise` run at `standard` instead of `deep` (the critic still resolves
   one tier above, to `deep`); `split` runs `units single`, so the change is
   exactly one unit; a green gate with `warnings:<m>` skips the mechanical
-  sweep instead of running it. Everything else, including Gate 0, is
-  unchanged. Set only by triage on the bugfix change it opens, or by the
+  sweep instead of running it; a non-UI `standard` leaf green on iteration
+  1 takes `unit-pass` (`unit pass`, critique `skipped`, logged as
+  `critique-skipped`) instead of a unit critic. Everything else, including
+  Gate 0 and the proposal critic, is unchanged. Set only by triage on the bugfix change it opens, or by the
   human through Gate 0's "Accept — light lifecycle" option — never by the
   orchestrator for any other change.
 - **Manual tasks**: `scripts/run-change tasks open --store <slug> --name

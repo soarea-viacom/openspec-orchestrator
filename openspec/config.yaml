@@ -51,8 +51,8 @@ context: |
 # refuses any project that does.
 # Example:
 #   orchestration:
-#     concurrency: 2          # change-level slots
-#     unit_concurrency: 3     # units in flight per change (default: concurrency)
+#     concurrency: 2          # change-level slots (default 2)
+#     unit_concurrency: 3     # units in flight per change (default 3)
 #     parallel: true          # false = one unit per change
 #     gate_quick: "npm run lint && npm run typecheck"
 #     gate_full: "npm test && npx knip"

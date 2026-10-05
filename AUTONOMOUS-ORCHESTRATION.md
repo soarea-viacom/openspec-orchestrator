@@ -116,8 +116,9 @@ append`, never edited after the fact.
    `scripts/run-change slot acquire --store <slug> --project
    <path>` before
    starting; blocks/queues if the project's concurrency cap (N, from the
-   store's `openspec/config.yaml` `orchestration.concurrency`, default 1)
-   is full. A change `blocked` on a dependency releases its slot while
+   store's `openspec/config.yaml` `orchestration.concurrency`, default 2 —
+   the disjoint-files check, not this cap, is what keeps concurrent
+   changes apart) is full. A change `blocked` on a dependency releases its slot while
    waiting — a dependency can never deadlock the cap.
 2. **Workspace** — `scripts/run-change workspace create --store <slug>
    --project <path> --name <name>`: branch `change/<name>` off the project's trunk,
@@ -298,9 +299,8 @@ append`, never edited after the fact.
 
    **Spawn.** The scheduler, `units next`, lists ready units (no dep
    outstanding, in `units` field order) up to the free capacity
-   (`orchestration.unit_concurrency`, else `orchestration.concurrency`,
-   else 1 — a unit `running`, `reviewing`, `conflict`, or `resolving` holds
-   a slot). `next` returns `unit-spawn` naming the ready units; the
+   (`orchestration.unit_concurrency`, default 3 — a unit `running`,
+   `reviewing`, `conflict`, or `resolving` holds a slot). `next` returns `unit-spawn` naming the ready units; the
    orchestrator runs `unit create --unit <u>` for each (branches
    `change/<name>.<u>` off the tip of `change/<name>` into
    `<ws>/<name>.<u>`, refusing an unknown unit, a dep not yet `merged`, or
@@ -316,6 +316,18 @@ append`, never edited after the fact.
    reasoning about a shared worktree applies to them; a dependent's
    worktree is only created after its dep has merged onto `change/<name>`,
    so it starts from the dep's own code.
+
+   **Pass without a critic.** Under `lifecycle: light` only: a unit that
+   is not in `ui_units`, is a `standard` leaf, went `green` on iteration 1,
+   and has no critique yet gets `unit-pass` (tier `none`) instead of a
+   critic: `unit pass --unit <u>` re-checks every one of those conditions
+   itself, sets `status reviewed` with `critique: skipped`, and logs `role
+   orchestrator phase unit unit <u> event critique-skipped reason
+   light-leaf-green-first-iteration`. Measured: unit critics over such
+   leaves found nothing, at the top tier's price; Verify still reads the
+   whole merged diff, so the unit is reviewed once rather than twice. A
+   second iteration, a screenshot, a foundation tier, or a `full`
+   lifecycle each keep the critic.
 
    **Critique.** Once a unit goes `green`, `next` returns `unit-critique`
    (checker one tier above *that unit's worker*: `deep` over a `standard`

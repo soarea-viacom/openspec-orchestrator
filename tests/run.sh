@@ -23,6 +23,7 @@ EOF
 cat > "$STORE/openspec/config.yaml" <<'EOF'
 orchestration:
   concurrency: 2
+  unit_concurrency: 2
   gate_quick: "echo QUICK-OK in $PWD"
   gate_full: "echo FULL-OK in $PWD"
 EOF
@@ -738,6 +739,27 @@ $RC state init --store teststore4 --name feat-cap4
 $RC state set --store teststore4 --name feat-cap4 seams "s=a.js,b.js,c.js" units "a=a.js;b=b.js;c=c.js" unit_deps ""
 check_out "unit_concurrency still read correctly when listed first" "ready: a b c" $RC units next --store teststore4 --name feat-cap4
 
+# defaults with neither key set: 2 changes per project, 3 units per change
+mkdir -p "$TMP/store-def/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  store-def:
+    local_path: $TMP/store-def
+EOF
+cat > "$TMP/store-def/openspec/config.yaml" <<'EOF'
+orchestration:
+  gate_quick: "echo QUICK-OK in $PWD"
+  gate_full: "echo FULL-OK in $PWD"
+EOF
+git clone -q "$TMP/origin" "$TMP/project-def"
+$RC state init --store store-def --name feat-def
+$RC state set --store store-def --name feat-def seams "s=a.js,b.js,c.js,d.js" units "a=a.js;b=b.js;c=c.js;d=d.js" unit_deps ""
+check_out "unit_concurrency defaults to 3" "ready: a b c" $RC units next --store store-def --name feat-def
+check_out "unit_concurrency default reports capacity 3" "capacity: 3" $RC units next --store store-def --name feat-def
+sd1="$($RC slot acquire --store store-def --project "$TMP/project-def")"
+sd2="$($RC slot acquire --store store-def --project "$TMP/project-def")"
+check "concurrency defaults to 2: two slots acquired" test -n "$sd1" -a -n "$sd2"
+check_out "concurrency default refuses a third slot" "no free slot (cap=2)" bash -c "$RC slot acquire --store store-def --project '$TMP/project-def' 2>&1; true"
+
 # units list: prints "<u> <status> <iterations>", pending when no unit file
 check_line "units list: created unit shows its status and iterations" "c running 0" $RC units list --store teststore --name feat-sched
 check_line "units list: unit with no file shows pending 0" "b pending 0" $RC units list --store teststore3 --name feat-cap3
@@ -1233,6 +1255,43 @@ EOF
 check_out "applying: a deep foundation unit is critiqued at max" "tier: max" $RC next --store teststore --name feat-appl-critique
 check_out "applying: the deep unit is dispatched on its own" "units: c" $RC next --store teststore --name feat-appl-critique
 check_out "model verify with checker_effort accepts the same model" "claude-opus-5-custom" $RC model verify --store teststore --name feat-verify
+
+# light lifecycle: a non-UI standard leaf green on iteration 1 skips the critic
+appl_init feat-appl-pass
+$RC state set --store teststore --name feat-appl-pass lifecycle light units "all=a.js,b.js,c.js" unit_deps "" ui_units ""
+udir="$(appl_udir feat-appl-pass)"; mkdir -p "$udir"
+cat > "$udir/all.yaml" <<'EOF'
+status: green
+tier: standard
+iterations: 1
+critique: ""
+EOF
+check_out "applying: light leaf green on iteration 1 -> unit-pass" "action: unit-pass" $RC next --store teststore --name feat-appl-pass
+check_out "applying: unit-pass is tier none" "tier: none" $RC next --store teststore --name feat-appl-pass
+check_out "applying: unit-pass names the unit" "units: all" $RC next --store teststore --name feat-appl-pass
+check "unit pass succeeds for the eligible unit" $RC unit pass --store teststore --name feat-appl-pass --unit all
+check_out "unit pass marks the unit reviewed" "status: reviewed" $RC unit get --store teststore --name feat-appl-pass --unit all
+check_out "unit pass records critique skipped" "critique: skipped" $RC unit get --store teststore --name feat-appl-pass --unit all
+check_out "unit pass logs the skip with its reason" "event=critique-skipped reason=light-leaf-green-first-iteration" $RC session list --store teststore --name feat-appl-pass
+check_out "applying: a passed unit proceeds to unit-merge" "action: unit-merge" $RC next --store teststore --name feat-appl-pass
+check_out "unit pass refuses a second time" "is not green" bash -c "$RC unit pass --store teststore --name feat-appl-pass --unit all 2>&1; true"
+
+appl_init feat-appl-pass2
+$RC state set --store teststore --name feat-appl-pass2 lifecycle light units "all=a.js" unit_deps "" ui_units ""
+udir="$(appl_udir feat-appl-pass2)"; mkdir -p "$udir"
+printf 'status: green\ntier: standard\niterations: 2\ncritique: ""\n' > "$udir/all.yaml"
+check_out "applying: light leaf needing 2 iterations keeps its critic" "action: unit-critique" $RC next --store teststore --name feat-appl-pass2
+check_out "unit pass refuses a unit that took more than one iteration" "not 1" bash -c "$RC unit pass --store teststore --name feat-appl-pass2 --unit all 2>&1; true"
+printf 'status: green\ntier: standard\niterations: 1\ncritique: ""\n' > "$udir/all.yaml"
+$RC state set --store teststore --name feat-appl-pass2 ui_units "all"
+check_out "applying: light UI unit keeps its critic" "action: unit-critique" $RC next --store teststore --name feat-appl-pass2
+check_out "unit pass refuses a UI unit" "UI unit" bash -c "$RC unit pass --store teststore --name feat-appl-pass2 --unit all 2>&1; true"
+$RC state set --store teststore --name feat-appl-pass2 ui_units "" lifecycle full
+check_out "applying: full lifecycle never skips the unit critic" "action: unit-critique" $RC next --store teststore --name feat-appl-pass2
+check_out "unit pass refuses under lifecycle full" "only light" bash -c "$RC unit pass --store teststore --name feat-appl-pass2 --unit all 2>&1; true"
+$RC state set --store teststore --name feat-appl-pass2 lifecycle light
+printf 'status: green\ntier: deep\niterations: 1\ncritique: ""\n' > "$udir/all.yaml"
+check_out "unit pass refuses a deep foundation unit" "foundation" bash -c "$RC unit pass --store teststore --name feat-appl-pass2 --unit all 2>&1; true"
 check_out "model verify prints the configured checker effort" "effort: high" $RC model verify --store teststore --name feat-verify
 
 appl_init feat-appl-spawn

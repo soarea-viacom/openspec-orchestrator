@@ -31,6 +31,7 @@ usage: run-change <command> [args]
   unit checks-done --store <slug> --project <path> --name <change> --unit <u>
   unit iterate   --store <slug> --project <path> --name <change> --unit <u>
   unit merge     --store <slug> --project <path> --name <change> --unit <u>
+  unit pass      --store <slug> --name <change> --unit <u>
   model get      --store <slug> --tier mechanical|standard|deep|max
   model verify   --store <slug> --name <change>
   model critic   --store <slug> --name <change> [--unit <u>]
@@ -516,6 +517,19 @@ cmd_unit_iterate() {
 # unit merge: rebases the unit branch onto change/<name>, refuses scope
 # creep, fast-forwards the change branch on success, ticks its tasks.md
 # ids, and removes the unit worktree/branch.
+# unit pass: the engine, not the orchestrator, decides a unit may skip its
+# critic — every condition is re-checked here, so a stray call cannot wave
+# a unit through.
+cmd_unit_pass() {
+  parse_opts "$@"
+  [ -n "$STORE" ] && [ -n "$NAME" ] && [ -n "$UNIT" ] || usage
+  unit_pass_eligible "$STORE" "$NAME" "$UNIT" || return 1
+  local uf; uf="$(unit_state_dir "$STORE" "$NAME")/$UNIT.yaml"
+  state_write "$uf" status reviewed
+  state_write "$uf" critique skipped
+  session_append "$(session_log_path "$STORE" "$NAME")" role orchestrator phase unit unit "$UNIT" event critique-skipped reason light-leaf-green-first-iteration
+}
+
 cmd_unit_merge() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$PROJECT" ] && [ -n "$NAME" ] && [ -n "$UNIT" ] || usage
@@ -973,6 +987,7 @@ case "$group $sub" in
   "unit remove") cmd_unit_remove "$@" ;;
   "unit get") cmd_unit_get "$@" ;;
   "unit set") cmd_unit_set "$@" ;;
+  "unit pass") cmd_unit_pass "$@" ;;
   "unit checks-done") cmd_unit_checks_done "$@" ;;
   "unit iterate") cmd_unit_iterate "$@" ;;
   "unit merge") cmd_unit_merge "$@" ;;
