@@ -140,13 +140,29 @@ append`, never edited after the fact.
    at `standard` instead — the critic still resolves one tier above, to
    `deep`, via the generator/checker split.
    Draft the delta spec via the normal `openspec-orchestrator` propose phase, scoped
-   to the workspace, `--store <slug>`. For a request that is a small, clearly
-   non-breaking fix (no change to a public API, schema, or any contract
-   another caller relies on), skip the extended exploration otherwise done
-   here and draft the smallest delta spec that captures the fix — the tier
-   stays `deep` either way, only how much is explored before drafting
-   shrinks. Reclassify and explore fully if the fix turns out to touch a
-   public contract once the code is examined. Before drafting prose, sketch the
+   to the workspace, `--store <slug>`. First **classify** the request on
+   four pillars, one line each in the proposal: **scope** (one file, one
+   seam, or several seams), **blast radius** (what else breaks if this is
+   wrong: nothing outside the seam, callers inside the project, or a
+   public API, schema, or contract another caller relies on), **novelty**
+   (a known pattern in this codebase, or new logic), and **dependency
+   impact** (no new dependency, a dev-only one, or a runtime one, external
+   service, or shared state). The classification decides the shape, and
+   nothing else does: all four at their lowest reading is a **fast-path
+   fix** — skip the extended exploration otherwise done here and draft the
+   smallest delta spec that captures it, and Gate 0 offers `light`; blast
+   radius or dependency impact beyond the project, or parts that would
+   merge independently, is an **initiative** (**Initiatives** below), not a
+   change; everything else is an ordinary `full` change. The tier stays
+   `deep` either way, only how much is explored before drafting shrinks.
+   Reclassify, and say so in the proposal, if the code turns out to read
+   higher on any pillar than the request suggested. The proposer states the
+   classification; it is the critic, below, who accepts or rejects it — a
+   proposer never lowers its own scrutiny. The proposal also carries a
+   **Guardrails** line: what this change must not introduce (a new
+   dependency, a new abstraction, a changed public signature, a widened
+   seam), named concretely, so the critic and Verify have a negative to
+   grade against and not only requirements to tick. Before drafting prose, sketch the
    **seams** the change touches:
    existing seams preferred over new ones, fewest possible (one is ideal),
    each seam named with the files/modules behind it. Write this seam list
@@ -184,8 +200,13 @@ append`, never edited after the fact.
      approach the critic cannot see how to verify, or sees a concrete way
      for it to fail, is `blocking` — never advisory — and when the critic
      can name a fix, that fix is the finding's remedy.
-   - **Right size**: smallest change that satisfies the request; flags
-     when it should instead be an initiative (see below) or is padded.
+   - **Right size**: smallest change that satisfies the request; the four
+     pillar readings are honest for the code as it is (a pillar read low
+     to earn the fast path is `blocking`), the resulting shape — fast-path,
+     `full`, or initiative (see below) — follows from them, the change is
+     not padded, and the Guardrails line names real risks for this seam
+     rather than generic ones. Verify later grades the diff against that
+     line as it does against every requirement.
    - **Written for agents**: the hard rule at the end of this doc.
 
    The critic writes a **critique report** to
@@ -219,7 +240,10 @@ append`, never edited after the fact.
    change is expected here — the missing input is a human answer, not a
    computation. On this action:
    1. Draft a **short resume** — a few sentences, not the delta spec —
-      of what is about to be implemented, and show it to the human.
+      of what is about to be implemented, and show it to the human, with
+      the proposal's four pillar readings and its Guardrails line as
+      written (the human is choosing `light` or `full` on exactly that
+      classification, and the critic has already checked it).
    2. In the same turn, offer to show the full proposal
       (`openspec show <name> --store <slug>`) and ask whether to accept or
       request changes. Showing the full proposal is not itself an answer —
@@ -404,7 +428,9 @@ append`, never edited after the fact.
    a seam is real or a dependency claim true. `model verify` prints this
    contract as `input:` lines after the bare model id — include them
    verbatim in the dispatch. It judges whether the code satisfies the
-   proposal; a requirement left as a manual task when a programmatic proxy
+   proposal, including its Guardrails line — a diff that introduces what
+   that line forbids is `blocking` like any unmet requirement; a
+   requirement left as a manual task when a programmatic proxy
    exists is reported as a `spec` finding, not left unverified silently.
    It also reads the store's `openspec/config.yaml`: a diff that adds or
    renames an `orchestration.*` key, adds a role overlay, or changes a
@@ -731,9 +757,10 @@ this follows from file ownership, not judgement:
 
 ## Initiatives (complex work split into linked changes)
 
-Split before creating a change when the request touches more than one
-independent area, needs more than ~8 tasks, or contains parts that could
-merge independently — independently-mergeable parts, not merely
+Split before creating a change when Propose's classification reads blast
+radius or dependency impact beyond the project, when the request touches
+more than one independent area, needs more than ~8 tasks, or contains
+parts that could merge independently — independently-mergeable parts, not merely
 independently-implementable ones: that is what units (Apply, step 4) are
 for *within* one change, and an initiative is for parts that cross a Gate
 2 of their own. Record an initiative

@@ -208,6 +208,17 @@
   seam-list line names the field rather than resolving it. Other files are
   read only to confirm a seam is real or a dependency claim true, never to
   explore the codebase at large.
+- **Classification**: Propose's reading of the request on four pillars —
+  scope, blast radius, novelty, dependency impact — written into the
+  proposal and shown in the Gate 0 resume. All lowest → fast-path fix
+  (Gate 0 offers `light`); blast radius or dependency impact beyond the
+  project, or independently-mergeable parts → initiative; else a `full`
+  change. The critic grades the readings under Right size; a pillar read
+  low to earn the fast path is `blocking`.
+- **Guardrails**: the proposal line naming what the change must not
+  introduce (dependency, abstraction, public signature, widened seam).
+  The critic checks it names real risks for the seam; Verify grades the
+  diff against it as against any requirement.
 - **Role overlay**: `<store>/openspec/roles/<role>.md` for one of
   `proposer`, `critic`, `worker`, `unit-critic`, `verifier` — project
   notes appended verbatim to that role's dispatch after the engine's own
