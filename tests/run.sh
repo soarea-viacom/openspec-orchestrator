@@ -327,6 +327,15 @@ $RC state set --store teststore --name feat-next last_verify_result warnings:3
 check_out "next: warnings only -> mechanical sweep" "action: sweep" $N
 $RC state set --store teststore --name feat-next last_verify_result spec
 check_out "next: spec finding -> gate1" "action: gate1" $N
+check_out "next: spec gate1 names spec_amend as the way out" "spec_amend accepted" $N
+$RC state set --store teststore --name feat-next spec_amend accepted
+check_out "next: accepted spec amendment -> fix" "action: fix" $N
+check_out "next: spec amendment fix runs at deep in round 1" "tier: deep" $N
+$RC state set --store teststore --name feat-next last_gate_result red
+check_out "next: spec amendment fix at deep also under a red gate" "tier: deep" $N
+$RC state set --store teststore --name feat-next fix_attempts 3
+check_out "next: spec amendment out of rounds -> gate1" "action: gate1" $N
+$RC state set --store teststore --name feat-next fix_attempts 0 last_gate_result green spec_amend ""
 $RC state set --store teststore --name feat-next last_verify_result clean
 check_out "next: verified clean -> tasks-open" "action: tasks-open" $N
 check_out "next: verified clean sets phase verified" "set_phase: verified" $N
@@ -832,6 +841,7 @@ check "exactly 1 green iterate entry logged" test "$n_green" = 1
 iters_log="$($RC session list --store storeu1 --name feat-iter | grep -o 'iteration=[0-9]*' | sort -u | tr '\n' ' ')"
 check "iterations 1..5 all logged, once each" test "$iters_log" = "iteration=1 iteration=2 iteration=3 iteration=4 iteration=5 "
 check_out "iterate entries carry tier standard" "tier=standard" $RC session list --store storeu1 --name feat-iter
+check_out "unit create records the leaf's tier" "tier: standard" $RC unit get --store storeu1 --name feat-iter --unit a
 nlines_before="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -d ' ')"
 check "6th iterate is refused" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a >/dev/null 2>&1"
 check_out "6th iterate names the iteration cap" "iteration cap" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a 2>&1; true"
@@ -958,7 +968,8 @@ $RC session append --store storeu3 --name feat-owner role worker phase proposed 
 # (once head closes the pipe after one line) would kill this whole script
 out1_full="$($RC model critic --store storeu3 --name feat-owner)"; out1="${out1_full%%$'\n'*}"
 out2_full="$($RC model critic --store storeu3 --name feat-owner --unit a)"; out2="${out2_full%%$'\n'*}"
-check "model critic --unit line 1 equals model critic line 1" test "$out1" = "$out2"
+check "model critic line 1 is max over the deep proposer" test "$out1" = claude-fable-5-1
+check "model critic --unit line 1 is deep over the standard leaf worker" test "$out2" = claude-opus-5
 check_out "model critic --unit contract mentions checks_commit" "checks_commit" $RC model critic --store storeu3 --name feat-owner --unit a
 check_out "model critic --unit contract mentions screenshot" "screenshot" $RC model critic --store storeu3 --name feat-owner --unit a
 check_out "model critic --unit contract mentions input:" "input:" $RC model critic --store storeu3 --name feat-owner --unit a
@@ -1159,6 +1170,7 @@ $RC session append --store teststore --name feat-appl-critique role worker phase
 udir="$(appl_udir feat-appl-critique)"; mkdir -p "$udir"
 cat > "$udir/a.yaml" <<'EOF'
 status: green
+tier: standard
 iterations: 3
 critique: ""
 EOF
@@ -1166,16 +1178,55 @@ cat > "$udir/b.yaml" <<'EOF'
 status: running
 iterations: 1
 EOF
+cat > "$udir/c.yaml" <<'EOF'
+status: green
+tier: deep
+iterations: 1
+critique: ""
+EOF
+# teststore maps standard, deep and max all onto claude-opus-5-custom, so a
+# standard worker's tier-above checker is its own model: refused without
+# checker_effort, accepted with it.
+check_out "applying: unit-critique with the worker's model at the tier above is refused" "own model" bash -c "$RC next --store teststore --name feat-appl-critique 2>&1; true"
+cat >> "$STORE/openspec/config.yaml" <<'EOF'
+  checker_effort: high
+EOF
 check_out "applying: green unit with no critique -> unit-critique" "action: unit-critique" $RC next --store teststore --name feat-appl-critique
-check_out "applying: unit-critique tier is one above a deep proposer" "tier: max" $RC next --store teststore --name feat-appl-critique
-check_out "applying: unit-critique names the green unit" "units: a" $RC next --store teststore --name feat-appl-critique
+check_out "applying: unit-critique tier is one above the unit's own standard worker, not the proposer" "tier: deep" $RC next --store teststore --name feat-appl-critique
+check_out "applying: unit-critique prints the configured checker effort" "effort: high" $RC next --store teststore --name feat-appl-critique
+check_out "applying: unit-critique groups only units at the same worker tier" "units: a" $RC next --store teststore --name feat-appl-critique
 check_out "applying: unit-critique still reports the running unit" "running: b" $RC next --store teststore --name feat-appl-critique
+cat > "$udir/a.yaml" <<'EOF'
+status: merged
+tier: standard
+iterations: 3
+critique: clean
+EOF
+check_out "applying: a deep foundation unit is critiqued at max" "tier: max" $RC next --store teststore --name feat-appl-critique
+check_out "applying: the deep unit is dispatched on its own" "units: c" $RC next --store teststore --name feat-appl-critique
+check_out "model verify with checker_effort accepts the same model" "claude-opus-5-custom" $RC model verify --store teststore --name feat-verify
+check_out "model verify prints the configured checker effort" "effort: high" $RC model verify --store teststore --name feat-verify
 
 appl_init feat-appl-spawn
 check_out "applying: fresh units -> unit-spawn" "action: unit-spawn" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn is tier standard" "tier: standard" $RC next --store teststore --name feat-appl-spawn
+check_out "applying: unit-spawn lists each leaf at standard" "unit_tiers: a=standard;b=standard" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn lists ready units up to capacity (2)" "units: a b" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn running line is empty" "running: " $RC next --store teststore --name feat-appl-spawn
+
+appl_init feat-appl-found
+$RC state set --store teststore --name feat-appl-found unit_deps "b=a;c=a"
+check_out "applying: a unit others depend on spawns at deep" "tier: deep" $RC next --store teststore --name feat-appl-found
+check_out "applying: unit_tiers marks the foundation unit deep" "unit_tiers: a=deep" $RC next --store teststore --name feat-appl-found
+check_out "applying: only the foundation unit is ready" "units: a" $RC next --store teststore --name feat-appl-found
+udir="$(appl_udir feat-appl-found)"; mkdir -p "$udir"
+cat > "$udir/a.yaml" <<'EOF'
+status: reviewing
+tier: deep
+iterations: 1
+critique: blocking:1
+EOF
+check_out "applying: unit-revise keeps the unit's recorded tier" "tier: deep" $RC next --store teststore --name feat-appl-found
 
 appl_init feat-appl-wait
 udir="$(appl_udir feat-appl-wait)"; mkdir -p "$udir"

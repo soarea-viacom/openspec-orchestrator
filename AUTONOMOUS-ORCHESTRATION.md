@@ -304,9 +304,13 @@ append`, never edited after the fact.
    orchestrator runs `unit create --unit <u>` for each (branches
    `change/<name>.<u>` off the tip of `change/<name>` into
    `<ws>/<name>.<u>`, refusing an unknown unit, a dep not yet `merged`, or
-   a dirty change worktree) and dispatches one `standard` Agent per unit
-   into that worktree — see **Unit workers** below for the dispatch
-   contract and the check-first loop it runs (`unit iterate`, capped at 5).
+   a dirty change worktree) and dispatches one Agent per unit into that
+   worktree at the tier `unit_tiers` names for it — `deep` for a
+   **foundation unit** (one some other unit depends on: it serialises the
+   wave, and a defect in it costs every dependent a rerun), `standard` for
+   a leaf; `unit create` records that tier on the unit's state file — see
+   **Unit workers** below for the dispatch contract and the check-first
+   loop it runs (`unit iterate`, capped at 5).
    Units with no dependency between them run concurrently, each in its own
    worktree and branch, so none of the Isolation or disjoint-files
    reasoning about a shared worktree applies to them; a dependent's
@@ -314,8 +318,10 @@ append`, never edited after the fact.
    so it starts from the dep's own code.
 
    **Critique.** Once a unit goes `green`, `next` returns `unit-critique`
-   (tier one above the logged proposer, `max` under full) over `units
-   ready-for-review`: the critic reads the unit's diff from its `base`, the
+   (checker one tier above *that unit's worker*: `deep` over a `standard`
+   leaf, `max` over a `deep` foundation unit — `model critic --unit <u>`;
+   green units at different tiers are dispatched in separate calls) over
+   `units ready-for-review`: the critic reads the unit's diff from its `base`, the
    checks diff to its `checks_commit`, and every recorded screenshot, and
    its report must quote the unit's recorded screenshot path verbatim for
    a UI unit. Clean or warnings → `status: reviewed`. Blocking, within the
@@ -414,7 +420,12 @@ append`, never edited after the fact.
      code does (including a requirement left manual when a programmatic
      proxy exists), so no code change can close the finding. → **Gate 1**
      immediately: the human owns the spec in autonomous mode, and a fix
-     round that edits the proposal would be the code grading itself.
+     round that edits the proposal would be the code grading itself. When
+     the human approves the amendment, record `state set ... spec_amend
+     accepted`; `next` then returns a `fix` at `deep` whatever the round
+     number — rewriting the delta spec and its checks is design work, and
+     a `standard` fixer here has needed a second round to get the checks
+     right. The fixer clears `spec_amend` with the two result fields.
 7. **Archive** — runs only from phase `verified`, and getting to `verified`
    is itself gated on the change's own tasks.md, not just the gate and
    Verify results above. The action that gets there — `tasks-open`, with
@@ -516,12 +527,17 @@ engine path, and the commands below — never another unit's transcript.
   resets, or touches any other branch, and it never edits tasks.md —
   concurrent units would race it; `unit merge` ticks the unit's tasks once
   it lands on `change/<name>`.
+- **Turns, not tokens, are the cost.** A worker's dispatch tells it to
+  issue independent tool calls in one turn (several Reads, a Read plus
+  the Bash check it does not depend on) rather than one per turn: on a
+  100K+ context every round-trip pays full latency, and the measured
+  workers averaged one tool per turn across 50–160 turns.
 - **Session log shapes** (all `phase=unit`): spawn —
-  `role worker phase unit unit <u> event spawn tier standard model <m>
-  transcript_id <id>` (orchestrator, at `unit-spawn` and `unit-revise`);
-  iterate — `role worker phase unit unit <u> event iterate iteration <n>
-  checks <green|red> tier standard model <m>` (written by `unit iterate`
-  itself); critique — `role critic phase unit unit <u> event critique
+  `role worker phase unit unit <u> event spawn tier <t> model <m>
+  transcript_id <id>` (orchestrator, at `unit-spawn` and `unit-revise`,
+  `<t>` from `unit_tiers`); iterate — `role worker phase unit unit <u>
+  event iterate iteration <n> checks <green|red> tier <t> model <m>`
+  (written by `unit iterate` itself, `<t>` from the unit's state file); critique — `role critic phase unit unit <u> event critique
   iteration <n> tier <t> model <m> transcript_id <id>` (orchestrator, at
   `unit-critique`); conflict agent — `role worker phase unit unit <u>
   event merge-conflict tier standard model <m> transcript_id <id>`; merge
@@ -828,40 +844,57 @@ Pick a tier per task, not per session:
   dead code and unused dependencies the gate's dead-code pass names,
   commit message drafting, first-round red-gate triage (flake vs lint vs
   type vs dead code vs logic).
-- `standard`: ordinary implementation tasks, tests, a unit worker (every
-  unit writer runs at `standard`, never a tier option — see **Unit
-  workers**), the merge-conflict agent, and — under `lifecycle: light`
-  only — Propose and `revise` (the critic still resolves one tier above,
-  to `deep`, via the generator/checker split below).
+- `standard`: ordinary implementation tasks, tests, a leaf unit worker
+  (no other unit depends on it — see **Unit workers**), fix rounds 1 and 2
+  that do not touch the spec, the merge-conflict agent, and — under
+  `lifecycle: light` only — Propose and `revise` (the critic still
+  resolves one tier above, to `deep`, via the generator/checker split
+  below).
 - `deep`: Propose (drafting the delta spec and seam list, every
   `full`-lifecycle change, not just initiative decomposition — `light`
   drafts at `standard`), `split` under `full` parallel mode (the unit
-  generator), design docs, anything touching an invariant, fix rounds 2
-  and 3, and Verify of a `standard` implementer.
+  generator), a foundation unit worker (one other units depend on), design
+  docs, anything touching an invariant, fix round 3, any fix round after
+  `spec_amend accepted`, Verify of a `standard` implementer, and the unit
+  critic over a `standard` leaf worker.
 - `max`: the strongest model available. Never a task tier: it is reached
-  only as the checker of a `deep` generator (the critic of every Propose,
-  Verify after a deep fix round, and the unit critic — `model critic
-  --unit` — over a unit worker). The unit critic is tied to the proposer's
-  tier, not the implementer's: every unit worker is logged `standard`, but
-  the unit critic resolves one tier above the logged *proposer* — `max`
-  under `full`, `deep` under `light`. Costed per unit, not per change: a
-  split into several concurrent units multiplies the critic calls by the
-  unit count.
+  only as the checker of a `deep` generator — the critic of every Propose,
+  Verify after a deep fix round, and the unit critic over a `deep`
+  foundation worker. A unit critic is sized against *its unit's worker*
+  (`model critic --unit <u>`), never the proposer: a `standard` leaf is
+  reviewed at `deep`, and only a `deep` foundation unit reaches `max`.
+  Costed per unit, not per change: a split into several concurrent units
+  multiplies the critic calls by the unit count.
+
+Why these placements: measured against a four-unit change, the two
+serial, design-heavy tasks (the foundation unit and a spec-amending fix
+round) were the ones that needed an extra review loop at `standard`, and
+the top-tier critic spent three of five unit reviews finding nothing on
+small leaf units. The leaf units themselves went green first time at
+`standard`.
 
 Specify/Plan (Propose) and Execute (Apply) are handled by the tiers above.
-The two checkers — Propose's critic and Verify — are different: they
-aren't sized by how hard the check is, but by who produced the thing being
-checked. **The checker is the tier one above the generator's.** A model is
-a weak reviewer of its own output, and a weaker model is a weak reviewer
-of a stronger one's, so the review always goes up the ladder
-`mechanical < standard < deep < max`: a `standard` implementer is verified
-at `deep`, a `deep` proposer is critiqued at `max`. Only when the
+The checkers — Propose's critic, the unit critic, and Verify — are
+different: they aren't sized by how hard the check is, but by who produced
+the thing being checked. **The checker must be a different reader from
+the generator: a different model, or the same model under a different
+configuration.** A model is a weak reviewer of its own output, and a
+weaker model is a weak reviewer of a stronger one's. The default way to
+get a different reader is the tier one above the generator's, up the
+ladder `mechanical < standard < deep < max`: a `standard` implementer is
+verified at `deep`, a `deep` proposer is critiqued at `max`. Only when the
 generator already sits at `max`, where nothing stronger exists, does the
-tier one below (`deep`, the second strongest) review instead. In every
-case the checker's model must differ from the generator's; if the store's
-`model_*` config maps that neighbouring tier onto the generator's own
-model, the command errors rather than review with the same model or drop
-quietly to a weaker tier. The generator's tier is read from its session
+tier one below (`deep`, the second strongest) review instead. If the
+store's `model_*` config maps that neighbouring tier onto the generator's
+own model, the command errors — unless the store sets
+`orchestration.checker_effort` (e.g. `high`): then the same model is
+accepted as the checker, and `model verify|critic` and `next` print an
+`effort:` line after the model for the dispatch to apply. The different
+configuration is what separates the two reads in that case — the fresh
+context and the input contract below, which every checker gets, plus the
+higher effort. Hosts whose agent dispatch cannot set effort per agent
+(Claude Code's Agent tool today) should leave `checker_effort` unset and
+keep distinct models. The generator's tier is read from its session
 entry (`tier=` on the last `applying`/`checking` entry for Verify, the
 last `proposed` entry for the critic); an entry without a tier is inferred
 from its model against the tier table, and with no history at all the
@@ -897,6 +930,15 @@ set, else the engine's default table (`model_for_tier` in
 itself), never a task dispatched to an agent.
 
 Pick the smallest tier that can be wrong safely.
+
+Two host-level levers sit outside the tier table. **Fast mode** applies to
+the `deep` model only (Claude Code serves Opus with faster output; Sonnet
+and Haiku have no fast mode) and is a session setting, not a per-agent
+one: enable it on the orchestrator session and every `deep` dispatch —
+proposer, foundation workers, Verify, spec-amending fixers — inherits it.
+**Prompt cache TTL**: a checker resumed after a human gate (Gate 1 in the
+middle of Verify) re-warms its whole context when the 5-minute cache has
+expired; the 1-hour TTL, where the host offers it, removes that cost.
 
 ### Project-skill stage mapping (Propose / critique / Verify)
 

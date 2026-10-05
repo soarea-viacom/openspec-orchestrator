@@ -62,9 +62,10 @@
   `resolving` holds a slot — review and conflict resolution reuse the slot
   the unit already holds rather than freeing it for a new unit to start.
 - **Unit critique**: the critic dispatched over `units ready-for-review`
-  (every `green` unit with no `critique` recorded yet), one tier above the
-  logged proposer (`max` under `full`, `deep` under `light` — not the
-  implementer's tier, which for a unit worker is always `standard`). Its
+  (every `green` unit with no `critique` recorded yet), one tier above
+  that unit's own worker — `deep` over a `standard` leaf, `max` over a
+  `deep` foundation unit (one other units depend on; `unit create` records
+  the tier on the unit's state file). Its
   report, `<name>.units/<unit>.critique.md`, must quote the unit's
   recorded `screenshot` path verbatim for a unit in `ui_units`; `unit set
   critique` refuses otherwise. `blocking` sends the unit back to

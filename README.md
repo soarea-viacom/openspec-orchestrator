@@ -59,8 +59,8 @@ flowchart TD
         P1c -- blocking, rounds left --> P1
         P1c -- clean/warnings --> P2[Apply: commit change worktree,<br/>split into units]
         P1c -- not converging / out of rounds --> GATE1[["Gate 1 (human)<br/>clarify the request"]]
-        P2 --> P2U[Units: parallel worktree + branch each,<br/>check-first loop capped at 5 iterations]
-        P2U --> P2C{Unit green?<br/>critic one tier above proposer, screenshots for UI units}
+        P2 --> P2U[Units: parallel worktree + branch each,<br/>deep for foundation units, standard for leaves,<br/>check-first loop capped at 5 iterations]
+        P2U --> P2C{Unit green?<br/>critic one tier above the unit's worker, screenshots for UI units}
         P2C -- blocking, cap left --> P2U
         P2C -- reviewed --> P2M[Merge unit onto change branch<br/>in dependency order]
         P2M -- conflict --> P2CF[merge-conflict agent,<br/>one attempt] --> P2M
@@ -181,8 +181,9 @@ For read-only discovery with no artifacts written:
    `gate_full` against the trunk ref in a temporary worktree. Red, or `gate_full`
    unconfigured, stops here; no change is opened and no state is written.
 3. **Autonomous run** — Propose (with critique) → Apply (split into units, each in its own
-   worktree/branch with a check-first loop capped at 5 iterations, reviewed by a critic one
-   tier above the proposer, merged in dependency order) → Check + Verify (concurrent) →
+   worktree/branch with a check-first loop capped at 5 iterations — `deep` for a unit others
+   depend on, `standard` for a leaf — reviewed by a critic one tier above its own worker,
+   merged in dependency order) → Check + Verify (concurrent) →
    Archive → Merge lane, with fix rounds and tier escalation handled automatically. No
    approval between phases. `parallel: false` runs the change as one unit instead, a
    single-worker baseline. The merge lane reruns the full gate only when merging trunk

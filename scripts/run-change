@@ -389,9 +389,11 @@ cmd_unit_create() {
   mkdir -p "$(dirname "$unit_wt")"
   git -C "$PROJECT" worktree add -b "$branch" "$unit_wt" "change/$NAME" >&2
   local base; base="$(git -C "$PROJECT" rev-parse "change/$NAME")"
+  local tier; tier="$(unit_tier "$STORE" "$NAME" "$UNIT")"
   cat > "$uf" <<EOF
 unit: $UNIT
 status: running
+tier: $tier
 iterations: 0
 base: $base
 checks_commit: ""
@@ -495,9 +497,10 @@ cmd_unit_iterate() {
   case ",$ui_units_v," in
     *",$UNIT,"*) [ -f "$shot" ] || result=red ;;
   esac
-  local model; model="$(model_for_tier "$STORE" standard)"
+  local tier; tier="$(unit_logged_tier "$STORE" "$NAME" "$UNIT")"
+  local model; model="$(model_for_tier "$STORE" "$tier")"
   session_append "$(session_log_path "$STORE" "$NAME")" \
-    role worker phase unit unit "$UNIT" event iterate iteration "$n" checks "$result" tier standard model "$model"
+    role worker phase unit unit "$UNIT" event iterate iteration "$n" checks "$result" tier "$tier" model "$model"
   state_write "$uf" iterations "$n"
   [ -f "$shot" ] && state_write "$uf" screenshot "$shot"
   if [ "$result" = green ]; then
@@ -619,20 +622,29 @@ cmd_model_get() {
   model_for_tier "$STORE" "$TIER"
 }
 
+print_checker_effort() {
+  local e; e="$(checker_effort "$STORE")"
+  [ -n "$e" ] && echo "effort: $e"; return 0
+}
+
 cmd_model_verify() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$NAME" ] || usage
   verify_model "$STORE" "$NAME"
+  print_checker_effort
   checker_inputs verify "$STORE" "$NAME"
 }
 
 cmd_model_critic() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$NAME" ] || usage
-  critic_model "$STORE" "$NAME"
   if [ -n "$UNIT" ]; then
+    unit_critic_pick "$STORE" "$NAME" "$UNIT" | cut -d' ' -f2
+    print_checker_effort
     checker_inputs unit-critic "$STORE" "$NAME" "$UNIT"
   else
+    critic_model "$STORE" "$NAME"
+    print_checker_effort
     checker_inputs critic "$STORE" "$NAME"
   fi
 }

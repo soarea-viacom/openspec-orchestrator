@@ -230,6 +230,23 @@ model_for_tier() {
   esac
 }
 
+# orch_scalar <store-slug> <key> -> orchestration.<key> as a bare scalar,
+# empty if unset. Same single-line awk-over-config convention as above.
+orch_scalar() {
+  local cfg; cfg="$(store_config "$1")"
+  awk -v key="$2" '
+    /^orchestration:/ { f=1; next }
+    f && /^[a-zA-Z]/ { exit }
+    f && index($0, key":") { sub(".*"key":[ ]*", ""); gsub(/^"|"$/, ""); print; exit }
+  ' "$cfg" 2>/dev/null || true
+}
+
+# checker_effort <store-slug> -> orchestration.checker_effort, empty if
+# unset. When set, a checker may share the generator's model: the different
+# configuration (this effort, plus the fresh context and the input contract
+# every checker already gets) is what separates the two reads.
+checker_effort() { orch_scalar "$1" checker_effort; }
+
 # stage_skills <store-slug> <stage> -> newline-separated project-skill names
 # mapped to that stage's orchestration.stage_skills entry, empty if unset.
 # `plan` is a bare scalar (`plan: project-spec-drafter`); `critic`/`test` are
@@ -778,8 +795,38 @@ checker_pick() {
   local cand=$((idx + 1)); [ "$cand" -lt "${#ladder[@]}" ] || cand=$((idx - 1))
   local t="${ladder[$cand]}" m; m="$(model_for_tier "$slug" "$t")"
   [ "$m" != "$gen" ] && { echo "$t $m"; return 0; }
-  echo "checker tier $t resolves to the $label's own model ($gen) — check orchestration.model_* in $(store_config "$slug")" >&2
+  [ -n "$(checker_effort "$slug")" ] && { echo "$t $m"; return 0; }
+  echo "checker tier $t resolves to the $label's own model ($gen) — map a different model in orchestration.model_* or set orchestration.checker_effort in $(store_config "$slug")" >&2
   return 1
+}
+
+# unit_tier <store-slug> <name> <unit> -> deep for a foundation unit (one
+# some other unit depends on: its defects cost every dependent a rerun and
+# it serialises the whole wave), standard for a leaf.
+unit_tier() {
+  local deps_v; deps_v="$(state_field "$(state_root "$1")/$2.yaml" unit_deps)"
+  local k
+  for k in $(map_keys "$deps_v"); do
+    [ "$k" = "$3" ] && continue
+    case ",$(map_get "$deps_v" "$k")," in *",$3,"*) echo deep; return 0 ;; esac
+  done
+  echo standard
+}
+
+# unit_logged_tier <store-slug> <name> <unit> -> the tier recorded on the
+# unit's state file at `unit create`, else unit_tier (a unit file written
+# before tiers were recorded).
+unit_logged_tier() {
+  local uf; uf="$(unit_state_dir "$1" "$2")/$3.yaml"
+  local t=""; [ -f "$uf" ] && t="$(state_field "$uf" tier)"
+  [ -n "$t" ] && echo "$t" || unit_tier "$1" "$2" "$3"
+}
+
+# unit_critic_pick <store-slug> <name> <unit> -> "<tier> <model>": the unit
+# critic is sized against the unit's own worker, not the proposer.
+unit_critic_pick() {
+  local t; t="$(unit_logged_tier "$1" "$2" "$3")"
+  checker_pick "$1" "$t" "$(model_for_tier "$1" "$t")" "unit $3 worker"
 }
 
 # With no session history at all the generator is assumed at its nominal
@@ -840,6 +887,7 @@ next_action_applying() {
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
   }
+  local ceffort; ceffort="$(checker_effort "$slug")"
 
   if [ -z "$units_v" ]; then
     local pmode; pmode="$(parallel_mode "$slug" "$f")" || return 1
@@ -896,7 +944,8 @@ next_action_applying() {
       blocking:*)
         local iters; iters="$(state_field "$uf" iterations)"; iters="${iters:-0}"
         if [ "$iters" -lt "$UNIT_ITER_CAP" ]; then
-          _na_emit unit-revise standard "$(model_for_tier "$slug" standard)" "unit $u critique $ucrit, iteration $iters/$UNIT_ITER_CAP: set unit $u status running critique \"\" first, then resume or re-dispatch the worker with the report"
+          local rt; rt="$(unit_logged_tier "$slug" "$name" "$u")"
+          _na_emit unit-revise "$rt" "$(model_for_tier "$slug" "$rt")" "unit $u critique $ucrit, iteration $iters/$UNIT_ITER_CAP: set unit $u status running critique \"\" first, then resume or re-dispatch the worker with the report"
           printf 'units: %s\n' "$u"
         else
           _na_emit gate1 none - "unit $u critique still blocking at the iteration cap ($iters/$UNIT_ITER_CAP)"
@@ -938,15 +987,30 @@ next_action_applying() {
     green_units="$green_units$u "
   done
   if [ -n "$green_units" ]; then
-    _na_emit unit-critique "$(critic_tier "$slug" "$name")" "$(critic_model "$slug" "$name")" "green units with no critique yet: one tier above the logged proposer"
-    printf 'units: %s\n' "${green_units% }"
+    # One dispatch per checker tier: a deep foundation unit and a standard
+    # leaf green at the same time get different critics.
+    local first; first="${green_units%% *}"
+    local pick; pick="$(unit_critic_pick "$slug" "$name" "$first")" || return 1
+    local ct="${pick%% *}" cm="${pick#* }" same=""
+    for u in $green_units; do
+      [ "$(unit_logged_tier "$slug" "$name" "$u")" = "$(unit_logged_tier "$slug" "$name" "$first")" ] && same="$same$u "
+    done
+    _na_emit unit-critique "$ct" "$cm" "green units with no critique yet: checker one tier above each unit's own worker ($(unit_logged_tier "$slug" "$name" "$first"))"
+    [ -n "$ceffort" ] && printf 'effort: %s\n' "$ceffort"
+    printf 'units: %s\n' "${same% }"
     printf 'running: %s\n' "$running_line"
     return 0
   fi
 
   # capacity free and a unit is ready -> unit-spawn
   if [ -n "$ready_line" ]; then
-    _na_emit unit-spawn standard "$(model_for_tier "$slug" standard)" "capacity free: unit create then one Agent per ready unit"
+    local st=standard tiers=""
+    for u in $ready_line; do
+      local ut; ut="$(unit_tier "$slug" "$name" "$u")"
+      tiers="$tiers$u=$ut;"; [ "$ut" = deep ] && st=deep
+    done
+    _na_emit unit-spawn "$st" "$(model_for_tier "$slug" "$st")" "capacity free: unit create then one Agent per ready unit, at the tier unit_tiers gives it (deep for a unit others depend on, standard for a leaf)"
+    printf 'unit_tiers: %s\n' "${tiers%;}"
     printf 'units: %s\n' "$ready_line"
     printf 'running: %s\n' "$running_line"
     return 0
@@ -994,6 +1058,8 @@ next_action() {
   lc="${lifecycle:-full}"
   manual_open="$(state_field "$f" manual_tasks_open)"
   manual_accept="$(state_field "$f" manual_accept)"
+  local spec_amend; spec_amend="$(state_field "$f" spec_amend)"
+  local ceffort; ceffort="$(checker_effort "$slug")"
   case "$lc" in
     full) ptier=deep ;;
     light) ptier=standard ;;
@@ -1012,6 +1078,17 @@ next_action() {
   fix_tier() { # tier for fix round number (1-based)
     case "$1" in 1) echo standard ;; 2) echo standard ;; *) echo deep ;; esac
   }
+  # A verify result of `spec` gates; once the human records
+  # `spec_amend accepted` the fix round that rewrites the delta spec and
+  # its checks is design work, so it runs at deep whatever the round number.
+  spec_fix() {
+    if [ "$fixes" -ge "$FIX_CAP" ]; then
+      emit gate1 none - "spec amendment accepted but no fix rounds left ($fixes/$FIX_CAP)"
+    else
+      emit fix deep "$(model_for_tier "$slug" deep)" "spec amendment accepted at Gate 1, fix round $((fixes + 1))/$FIX_CAP at deep: amend the proposal/delta spec and the checks together, then clear spec_amend, last_gate_result and last_verify_result and recheck"
+    fi
+  }
+  emit_effort() { [ -n "$ceffort" ] && printf 'effort: %s\n' "$ceffort"; return 0; }
   # not_converging <last> <prev>: both blocking and the count did not fall.
   # The other half of the convergence test (a closed finding reappearing)
   # needs finding ids in the reports and stays with the checker's judgement.
@@ -1030,6 +1107,7 @@ next_action() {
             emit propose "$ptier" "$(model_for_tier "$slug" "$ptier")" "no draft yet: Propose runs at $ptier ($lc lifecycle)"
           else
             emit critique "$(critic_tier "$slug" "$name")" "$(critic_model "$slug" "$name")" "draft exists, not yet critiqued: critic one tier above the proposer"
+            emit_effort
           fi ;;
         clean|warnings:*)
           emit gate0 none - "critique passed ($crit); warnings swept at mechanical in place: ask the human to accept a short resume before Apply.$gate0_light" awaiting-acceptance ;;
@@ -1064,10 +1142,13 @@ next_action() {
           # at once; the pass line (green AND clean) is unchanged.
           emit check none - "run the full gate and Verify concurrently on the committed tree; record last_gate_result green|red and last_verify_result"
           local vm; vm="$(verify_model "$slug" "$name")" || vm=-
-          printf 'also: verify\nalso_model: %s\n' "$vm" ;;
+          printf 'also: verify\nalso_model: %s\n' "$vm"
+          emit_effort ;;
         red)
-          if [ "$verify" = spec ]; then
-            emit gate1 none - "verify says the proposal itself is wrong: human owns the spec"
+          if [ "$verify" = spec ] && [ "$spec_amend" = accepted ]; then
+            spec_fix
+          elif [ "$verify" = spec ]; then
+            emit gate1 none - "verify says the proposal itself is wrong: human owns the spec; record spec_amend accepted to run the amendment as a deep fix round"
           elif [ -n "$verify" ] && not_converging "$verify" "$pverify"; then
             emit gate1 none - "verify not converging: $pverify -> $verify, blocking count did not fall; spending remaining rounds would repeat it"
           elif [ "$fixes" -ge "$FIX_CAP" ]; then
@@ -1079,7 +1160,8 @@ next_action() {
         green)
           case "$verify" in
             "")
-              emit verify "$(verify_tier "$slug" "$name")" "$(verify_model "$slug" "$name")" "gate green, not yet verified: checker one tier above the implementer" ;;
+              emit verify "$(verify_tier "$slug" "$name")" "$(verify_model "$slug" "$name")" "gate green, not yet verified: checker one tier above the implementer"
+              emit_effort ;;
             clean)
               emit tasks-open none - "verify clean: run 'tasks open' to record manual_tasks_open, then record verified" verified ;;
             warnings:*)
@@ -1098,7 +1180,11 @@ next_action() {
                 emit fix "$t" "$(model_for_tier "$slug" "$t")" "verify $verify, fix round $n/$FIX_CAP: fix only the named findings, then clear last_gate_result and last_verify_result and recheck"
               fi ;;
             spec)
-              emit gate1 none - "verify says the proposal itself is wrong: human owns the spec" ;;
+              if [ "$spec_amend" = accepted ]; then
+                spec_fix
+              else
+                emit gate1 none - "verify says the proposal itself is wrong: human owns the spec; record spec_amend accepted to run the amendment as a deep fix round"
+              fi ;;
             *) echo "unknown last_verify_result '$verify'" >&2; return 1 ;;
           esac ;;
         *) echo "unknown last_gate_result '$gate' (expected green|red)" >&2; return 1 ;;
