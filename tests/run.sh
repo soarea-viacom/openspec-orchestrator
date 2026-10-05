@@ -162,6 +162,17 @@ check_out "model get honors store override" "claude-opus-5-custom" $RC model get
 
 # stage -> project skill(s) (docs/proposals/skill-stage-mapping.md)
 check_out "stage-skills get is empty when stage_skills is unset" "" $RC stage-skills get --store teststore --stage plan
+
+# role overlays: <store>/openspec/roles/<role>.md, text printed verbatim
+check_out "roles get with no overlay prints nothing" "" $RC roles get --store teststore --role critic
+check "roles get with no overlay exits 0" $RC roles get --store teststore --role critic
+check_out "roles get refuses an unknown role" "unknown role" bash -c "$RC roles get --store teststore --role reviewer 2>&1; true"
+check "roles get with an unknown role exits non-zero" bash -c "! $RC roles get --store teststore --role reviewer >/dev/null 2>&1"
+mkdir -p "$STORE/openspec/roles"
+printf 'Check every scenario in the delta spec has a named test.\n' > "$STORE/openspec/roles/critic.md"
+printf 'Run tests with ./tests/run.sh; a red check prints FAIL.\n' > "$STORE/openspec/roles/worker.md"
+check_out "roles get prints the overlay text" "named test" $RC roles get --store teststore --role critic
+check_out "roles get is per role" "FAIL" $RC roles get --store teststore --role worker
 cat >> "$STORE/openspec/config.yaml" <<'EOF'
   stage_skills:
     plan: project-spec-drafter
@@ -251,6 +262,7 @@ check_out "next: propose model is deep" "model: claude-opus-5-custom" $N
 $RC session append --store teststore --name feat-next role worker phase proposed tier deep model claude-opus-5-plain transcript_id p1
 check_out "next: draft exists -> critique" "action: critique" $N
 check_out "next: critique of a deep draft runs at max" "tier: max" $N
+check_out "next: critique names the store's critic overlay" "overlay: $STORE/openspec/roles/critic.md" $N
 $RC session append --store teststore --name feat-next role worker phase proposed tier max model claude-fable-5-1 transcript_id p2
 check_out "next: critique of a max draft runs at deep" "tier: deep" $N
 $RC state set --store teststore --name feat-next last_critique_result blocking:2
@@ -299,8 +311,13 @@ $RC state set --store teststore --name feat-next phase checking
 check_out "next: checking with no gate result -> check" "action: check" $N
 check_out "next: check also dispatches verify concurrently" "also: verify" $N
 check_out "next: concurrent verify gets the distinct-model id" "also_model: claude-opus-5-custom" $N
+out_chk="$($N)"
+case "$out_chk" in *"also_overlay:"*) echo "FAIL next: check prints no also_overlay without a verifier overlay"; fails=$((fails+1)) ;; *) echo "ok   next: check prints no also_overlay without a verifier overlay" ;; esac
+printf 'Verify the bump in releases.json matches the SKILL.md change.\n' > "$STORE/openspec/roles/verifier.md"
+check_out "next: check names the verifier overlay for the concurrent Verify" "also_overlay: $STORE/openspec/roles/verifier.md" $N
 $RC state set --store teststore --name feat-next last_gate_result red
 check_out "next: red gate -> fix round 1" "action: fix" $N
+check_out "next: fix names the worker overlay" "overlay: $STORE/openspec/roles/worker.md" $N
 check_out "next: fix round 1 is standard" "tier: standard" $N
 $RC state set --store teststore --name feat-next fix_attempts 2
 check_out "next: fix round 3 is deep" "tier: deep" $N
@@ -308,6 +325,7 @@ $RC state set --store teststore --name feat-next fix_attempts 3
 check_out "next: red gate out of rounds -> gate1" "action: gate1" $N
 $RC state set --store teststore --name feat-next last_gate_result green fix_attempts 0
 check_out "next: green gate unverified -> verify" "action: verify" $N
+check_out "next: verify names the verifier overlay" "overlay: $STORE/openspec/roles/verifier.md" $N
 $RC session append --store teststore --name feat-next role worker phase applying tier standard model claude-sonnet-5 transcript_id a1
 check_out "next: verify model is the tier above the implementer" "model: claude-opus-5-custom" $N
 check_out "next: verify of a standard implementer runs at deep" "tier: deep" $N
@@ -338,6 +356,8 @@ check_out "next: spec amendment out of rounds -> gate1" "action: gate1" $N
 $RC state set --store teststore --name feat-next fix_attempts 0 last_gate_result green spec_amend ""
 $RC state set --store teststore --name feat-next last_verify_result clean
 check_out "next: verified clean -> tasks-open" "action: tasks-open" $N
+out_to="$($N)"
+case "$out_to" in *"overlay:"*) echo "FAIL next: a none-tier action prints no overlay"; fails=$((fails+1)) ;; *) echo "ok   next: a none-tier action prints no overlay" ;; esac
 check_out "next: verified clean sets phase verified" "set_phase: verified" $N
 
 # verified: manual_tasks_open gates archive
@@ -1194,6 +1214,10 @@ EOF
 check_out "applying: green unit with no critique -> unit-critique" "action: unit-critique" $RC next --store teststore --name feat-appl-critique
 check_out "applying: unit-critique tier is one above the unit's own standard worker, not the proposer" "tier: deep" $RC next --store teststore --name feat-appl-critique
 check_out "applying: unit-critique prints the configured checker effort" "effort: high" $RC next --store teststore --name feat-appl-critique
+out_uc="$($RC next --store teststore --name feat-appl-critique)"
+case "$out_uc" in *"overlay:"*) echo "FAIL applying: unit-critique prints no overlay when only critic.md exists"; fails=$((fails+1)) ;; *) echo "ok   applying: unit-critique prints no overlay when only critic.md exists" ;; esac
+printf 'Open the screenshot before reading the diff.\n' > "$STORE/openspec/roles/unit-critic.md"
+check_out "applying: unit-critique names the unit-critic overlay" "overlay: $STORE/openspec/roles/unit-critic.md" $RC next --store teststore --name feat-appl-critique
 check_out "applying: unit-critique groups only units at the same worker tier" "units: a" $RC next --store teststore --name feat-appl-critique
 check_out "applying: unit-critique still reports the running unit" "running: b" $RC next --store teststore --name feat-appl-critique
 cat > "$udir/a.yaml" <<'EOF'
@@ -1211,6 +1235,7 @@ appl_init feat-appl-spawn
 check_out "applying: fresh units -> unit-spawn" "action: unit-spawn" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn is tier standard" "tier: standard" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn lists each leaf at standard" "unit_tiers: a=standard;b=standard" $RC next --store teststore --name feat-appl-spawn
+check_out "applying: unit-spawn names the worker overlay" "overlay: $STORE/openspec/roles/worker.md" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn lists ready units up to capacity (2)" "units: a b" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn running line is empty" "running: " $RC next --store teststore --name feat-appl-spawn
 

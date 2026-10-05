@@ -204,6 +204,12 @@
   seam-list line names the field rather than resolving it. Other files are
   read only to confirm a seam is real or a dependency claim true, never to
   explore the codebase at large.
+- **Role overlay**: `<store>/openspec/roles/<role>.md` for one of
+  `proposer`, `critic`, `worker`, `unit-critic`, `verifier` — project
+  notes appended verbatim to that role's dispatch after the engine's own
+  instructions. `next` prints `overlay: <path>` (and `also_overlay:` for
+  the Verify beside `check`); `roles get` prints the text. Adds knowledge,
+  never changes a contract: the engine's text wins on conflict.
 - **Gate tree**: the `gate_tree` state field — the git tree id the last
   *passing* full gate ran on, written by `gate run --mode full` itself.
   The merge lane compares it to the tree after merging trunk in and skips

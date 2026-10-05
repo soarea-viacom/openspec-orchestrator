@@ -247,6 +247,33 @@ orch_scalar() {
 # every checker already gets) is what separates the two reads.
 checker_effort() { orch_scalar "$1" checker_effort; }
 
+# Role overlays: project-specific notes a store appends to one of the
+# engine's role prompts, kept beside config.yaml so they version with the
+# specs and never touch the target project. Fixed role set, so a typo is an
+# error rather than a silently ignored file.
+ROLES="proposer critic worker unit-critic verifier"
+
+# role_overlay <store-slug> <role> -> path of <store>/openspec/roles/<role>.md
+# if it exists, empty otherwise. Exits non-zero on an unknown role.
+role_overlay() {
+  case " $ROLES " in *" $2 "*) ;; *) echo "unknown role '$2' (expected one of: $ROLES)" >&2; return 1 ;; esac
+  local f; f="$(store_path "$1")/openspec/roles/$2.md"
+  [ -f "$f" ] && echo "$f"
+  return 0
+}
+
+# role_for_action <action> -> the role whose overlay a `next` action
+# dispatches with, empty for none-tier actions.
+role_for_action() {
+  case "$1" in
+    propose|revise) echo proposer ;;
+    critique) echo critic ;;
+    unit-spawn|unit-revise|fix|sweep|merge-conflict|split) echo worker ;;
+    unit-critique) echo unit-critic ;;
+    verify) echo verifier ;;
+  esac
+}
+
 # stage_skills <store-slug> <stage> -> newline-separated project-skill names
 # mapped to that stage's orchestration.stage_skills entry, empty if unset.
 # `plan` is a bare scalar (`plan: project-spec-drafter`); `critic`/`test` are
@@ -873,6 +900,16 @@ critic_tier()  { critic_pick "$1" "$2" | cut -d' ' -f1; }
 FIX_CAP=3
 PROPOSE_CAP=2
 
+# emit_overlay <slug> <action> -> prints `overlay: <path>` when the store
+# has an overlay for the action's role.
+emit_overlay() {
+  local r; r="$(role_for_action "$2")"
+  [ -n "$r" ] || return 0
+  local ov; ov="$(role_overlay "$1" "$r")"
+  [ -n "$ov" ] && printf 'overlay: %s\n' "$ov"
+  return 0
+}
+
 # next_action_applying <slug> <name> <state-file> <lifecycle> -- the
 # phase=applying action table. Reads only state files (the change's and
 # each unit's) and the session log, same as next_action overall. Every
@@ -886,6 +923,7 @@ next_action_applying() {
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
+    emit_overlay "$slug" "$1"
   }
   local ceffort; ceffort="$(checker_effort "$slug")"
 
@@ -1074,6 +1112,7 @@ next_action() {
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
+    emit_overlay "$slug" "$1"
   }
   fix_tier() { # tier for fix round number (1-based)
     case "$1" in 1) echo standard ;; 2) echo standard ;; *) echo deep ;; esac
@@ -1143,6 +1182,8 @@ next_action() {
           emit check none - "run the full gate and Verify concurrently on the committed tree; record last_gate_result green|red and last_verify_result"
           local vm; vm="$(verify_model "$slug" "$name")" || vm=-
           printf 'also: verify\nalso_model: %s\n' "$vm"
+          local vov; vov="$(role_overlay "$slug" verifier)"
+          [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
           emit_effort ;;
         red)
           if [ "$verify" = spec ] && [ "$spec_amend" = accepted ]; then

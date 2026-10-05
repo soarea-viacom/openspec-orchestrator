@@ -35,6 +35,7 @@ usage: run-change <command> [args]
   model verify   --store <slug> --name <change>
   model critic   --store <slug> --name <change> [--unit <u>]
   stage-skills get --store <slug> --stage plan|critic|test
+  roles get      --store <slug> --role proposer|critic|worker|unit-critic|verifier
   merge-lane run --store <slug> --project <path> --name <change>
   tasks open     --store <slug> --name <change>
   state init|get|set --store <slug> --name <change> [key value ...]
@@ -52,7 +53,7 @@ EOF
 parse_opts() {
   # Fills STORE, PROJECT, NAME, MODE, SLOT, TIER, STAGE, TRUNK, UNIT, UI from
   # remaining args. TRUNK and UI are bare flags (0/1), not --key value pairs.
-  STORE=""; PROJECT=""; NAME=""; MODE=""; SLOT=""; TIER=""; CHILD=""; COMMIT=""; WORKER=""; STAGE=""; TRUNK=0; UNIT=""; UI=0
+  STORE=""; PROJECT=""; NAME=""; MODE=""; SLOT=""; TIER=""; CHILD=""; COMMIT=""; WORKER=""; STAGE=""; ROLE=""; TRUNK=0; UNIT=""; UI=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --worker) WORKER="$2"; shift 2 ;;
@@ -65,6 +66,7 @@ parse_opts() {
       --slot) SLOT="$2"; shift 2 ;;
       --tier) TIER="$2"; shift 2 ;;
       --stage) STAGE="$2"; shift 2 ;;
+      --role) ROLE="$2"; shift 2 ;;
       --unit) UNIT="$2"; shift 2 ;;
       --trunk) TRUNK=1; shift ;;
       --ui) UI=1; shift ;;
@@ -78,7 +80,7 @@ parse_opts() {
 kv_args() {
   PAIRS=()
   while [ $# -gt 0 ]; do
-    case "$1" in --store|--project|--name|--mode|--slot|--tier|--stage|--child|--commit|--worker|--unit) shift 2 ;; --trunk|--ui) shift ;; *) PAIRS+=("$1"); shift ;; esac
+    case "$1" in --store|--project|--name|--mode|--slot|--tier|--stage|--role|--child|--commit|--worker|--unit) shift 2 ;; --trunk|--ui) shift ;; *) PAIRS+=("$1"); shift ;; esac
   done
 }
 
@@ -655,6 +657,17 @@ cmd_stage_skills_get() {
   stage_skills "$STORE" "$STAGE"
 }
 
+# roles get: prints the overlay's text (not its path) so the orchestrator
+# can paste it into the dispatch verbatim; empty output when the store has
+# none for that role.
+cmd_roles_get() {
+  parse_opts "$@"
+  [ -n "$STORE" ] && [ -n "$ROLE" ] || usage
+  local f; f="$(role_overlay "$STORE" "$ROLE")" || return 1
+  [ -n "$f" ] && cat "$f"
+  return 0
+}
+
 cmd_merge_lane_run() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$PROJECT" ] && [ -n "$NAME" ] || usage
@@ -967,6 +980,7 @@ case "$group $sub" in
   "model verify") cmd_model_verify "$@" ;;
   "model critic") cmd_model_critic "$@" ;;
   "stage-skills get") cmd_stage_skills_get "$@" ;;
+  "roles get") cmd_roles_get "$@" ;;
   "merge-lane run") cmd_merge_lane_run "$@" ;;
   "tasks open") cmd_tasks_open "$@" ;;
   "state init") cmd_state_init "$@" ;;

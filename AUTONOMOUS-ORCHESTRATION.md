@@ -485,7 +485,8 @@ ask. Squash-merge produces one commit per change on the project's trunk.
 
 A unit worker's dispatch carries the proposal and delta spec, its unit's
 task ids and their tasks.md text, its file list, its worktree path, the
-engine path, and the commands below — never another unit's transcript.
+engine path, the commands below, and the store's `worker` overlay when
+`next` printed one (**Role overlays**) — never another unit's transcript.
 
 - **Checks first.** Step 1, before any implementation: write executable
   checks — unit tests in the project's own runner for each requirement the
@@ -971,6 +972,31 @@ the one check this engine can vouch for itself), and it never checks whether a m
 skill is safe to run unattended — if a project maps a skill that stops to interview a
 human, the change simply stalls in that phase, visible the same way any other broken step
 is, not something this engine detects in advance.
+
+### Role overlays (project notes for a role, kept in the store)
+
+The engine's role prompts — proposer, critic, unit worker, unit critic,
+Verify — are the same for every project. What differs per project is
+knowledge: how to run and read its tests, a review checklist tuned to its
+failure modes, the harness a UI unit must use. A store carries that as
+**role overlays**: `<store>/openspec/roles/<role>.md`, one file per role
+from the fixed set `proposer`, `critic`, `worker`, `unit-critic`,
+`verifier`, beside `config.yaml` so it versions with the specs and, in
+external mode, never touches the target project. `next` prints
+`overlay: <path>` on every action that dispatches that role (and
+`also_overlay:` for the Verify it runs beside `check`); `scripts/run-change
+roles get --store <slug> --role <role>` prints the text, empty when the
+store has none, and refuses a role outside the set. The orchestrator
+appends the text verbatim to the dispatch, after the engine's own
+instructions for that role.
+
+An overlay adds; it never overrides. The input contract, the session log
+shapes, the iterate loop, the pass line, and the tier the role runs at are
+the engine's, and where overlay text contradicts them the engine's text
+wins — the overlay is project knowledge handed to a role, not a
+replacement role. `worker` covers every writing dispatch: unit workers,
+fix rounds, the mechanical sweep, the merge-conflict agent, and `split`.
+The orchestrator's own session is not a role and takes no overlay.
 
 ### Fix rounds
 
