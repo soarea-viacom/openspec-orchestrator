@@ -8,6 +8,15 @@ schema: spec-driven
 #     Tech stack: TypeScript, React, Node.js
 #     We use conventional commits
 #     Domain: e-commerce platform
+context: |
+  This repo is the openspec-orchestrator engine itself, not a target project:
+  bash scripts (scripts/run-change, scripts/lib.sh) plus the two docs the
+  skill loads (SKILL.md, AUTONOMOUS-ORCHESTRATION.md). CONTEXT.md holds the
+  domain vocabulary. Tests are tests/run.sh (check/check_out/check_line
+  helpers, a no-caller function scan as the dead-code pass). Every change to
+  SKILL.md or AUTONOMOUS-ORCHESTRATION.md bumps releases.json via
+  `atlas bump skill openspec-orchestrator --minor -m "..."`, never by hand;
+  one bump per change. Comments state non-obvious rationale only.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
@@ -47,5 +56,6 @@ schema: spec-driven
 # no-caller function scan is the dead-code pass for bash.
 orchestration:
   concurrency: 1
+  unit_concurrency: 3
   gate_quick: "bash -n scripts/run-change && bash -n scripts/lib.sh"
   gate_full: "./tests/run.sh"
