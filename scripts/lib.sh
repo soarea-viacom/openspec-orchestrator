@@ -162,6 +162,7 @@ checker_inputs() {
       printf 'input: the proposal + delta spec\n'
       printf '%s\n' "$seam_line"
       printf 'input: the branch diff\n'
+      printf 'input: the store config — %s/openspec/config.yaml: a diff that adds or renames an orchestration.* key, a role overlay, or a convention the context block states must be reflected there, else one warning finding\n' "$(store_path "$slug")"
       ;;
     *) echo "unknown checker role '$role' (expected critic|verify|unit-critic)" >&2; return 1 ;;
   esac

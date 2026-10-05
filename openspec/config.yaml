@@ -16,7 +16,11 @@ context: |
   helpers, a no-caller function scan as the dead-code pass). Every change to
   SKILL.md or AUTONOMOUS-ORCHESTRATION.md bumps releases.json via
   `atlas bump skill openspec-orchestrator --minor -m "..."`, never by hand;
-  one bump per change. Comments state non-obvious rationale only.
+  one bump per change. Comments state non-obvious rationale only. A change
+  that adds an orchestration.* key, a role, or a convention updates the
+  example block and this context in the same change; Verify warns otherwise.
+  Project notes per role live in openspec/roles/<role>.md (proposer, critic,
+  worker, unit-critic, verifier) and are appended to that role's dispatch.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
@@ -47,9 +51,15 @@ context: |
 # refuses any project that does.
 # Example:
 #   orchestration:
-#     concurrency: 2
+#     concurrency: 2          # change-level slots
+#     unit_concurrency: 3     # units in flight per change (default: concurrency)
+#     parallel: true          # false = one unit per change
 #     gate_quick: "npm run lint && npm run typecheck"
 #     gate_full: "npm test && npx knip"
+#     model_mechanical / model_standard / model_deep / model_max: per-tier overrides
+#     checker_effort: high    # lets a checker share the generator's model
+#     stage_skills: { plan: <skill>, critic: [<skill>], test: [<skill>] }
+# Role overlays (not keys): openspec/roles/<role>.md, see AUTONOMOUS-ORCHESTRATION.md.
 # gate_full must include the project's dead-code pass (knip, vulture, ...):
 # tests cannot see the abandoned helpers and unused deps agents leave.
 # This orchestrator gates its own engine scripts with tests/run.sh, whose

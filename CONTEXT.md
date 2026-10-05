@@ -200,7 +200,9 @@
 - **Checker input contract**: the fixed set of inputs `model critic` and
   `model verify` print as `input:` lines after the bare model id — critic:
   request, draft, seam list, prior report; Verify: proposal, seam list,
-  branch diff, prior report. Both read no state file to produce this; the
+  branch diff, the store's `config.yaml` (a new `orchestration.*` key,
+  role overlay, or convention not reflected there is one warning), prior
+  report. Both read no state file to produce this; the
   seam-list line names the field rather than resolving it. Other files are
   read only to confirm a seam is real or a dependency claim true, never to
   explore the codebase at large.

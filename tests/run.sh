@@ -194,6 +194,10 @@ check_out "model verify picks the tier above the implementer" "claude-opus-5-cus
 check_out "model verify contract names the store/name/seams field" "--store teststore --name feat-verify, field seams" $RC model verify --store teststore --name feat-verify
 check_out "model verify first line is the bare model id" "claude-opus-5-custom" bash -c "$RC model verify --store teststore --name feat-verify | head -n1"
 check_out "model verify contract mentions input and seam" "input:" $RC model verify --store teststore --name feat-verify
+check_out "model verify contract names the store config as an input" "$STORE/openspec/config.yaml" $RC model verify --store teststore --name feat-verify
+check_out "model verify contract makes a stale config a warning" "else one warning finding" $RC model verify --store teststore --name feat-verify
+out_cc="$($RC model critic --store teststore --name feat-critic 2>/dev/null || true)"
+case "$out_cc" in *"config.yaml"*) echo "FAIL model critic contract does not name the store config"; fails=$((fails+1)) ;; *) echo "ok   model critic contract does not name the store config" ;; esac
 $RC session append --store teststore --name feat-infer role worker phase applying model claude-sonnet-5 transcript_id t1
 check_out "model verify infers the tier from the model when an entry has none" "claude-opus-5-custom" $RC model verify --store teststore --name feat-infer
 cat >> "$STORE/openspec/config.yaml" <<'EOF'

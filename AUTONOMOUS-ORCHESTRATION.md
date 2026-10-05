@@ -394,6 +394,12 @@ append`, never edited after the fact.
    verbatim in the dispatch. It judges whether the code satisfies the
    proposal; a requirement left as a manual task when a programmatic proxy
    exists is reported as a `spec` finding, not left unverified silently.
+   It also reads the store's `openspec/config.yaml`: a diff that adds or
+   renames an `orchestration.*` key, adds a role overlay, or changes a
+   convention the `context:` block states, without updating that file, is
+   one `warning` finding — the mechanical sweep then edits the config, the
+   same as any other warning. Architecture lands in the living spec at
+   Archive by itself; conventions only stay current if someone asks.
    If the project mapped one or more skills to
    `test` (**Project-skill stage mapping**), each of them is dispatched
    **concurrently** with this checker, reads the proposal and diff, and
@@ -769,7 +775,8 @@ each other forever.
   implementation approach the checker cannot see how to verify or sees a
   concrete way to fail) or
   `warning` (the output is correct but violates the hard rule at the end
-  of this doc). The mechanism finding is never advisory, and its remedy is
+  of this doc, or leaves the store's `config.yaml` behind a convention or
+  `orchestration.*` key the change introduced). The mechanism finding is never advisory, and its remedy is
   the fix the checker can name. The checker assigns severity; the fixer
   does not reclassify.
 - **Pass is defined up front.** A change passes Verify when the full gate
