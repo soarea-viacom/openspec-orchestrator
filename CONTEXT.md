@@ -154,9 +154,9 @@
 - **Next action**: `scripts/run-change next --store <slug> --name <change>`
   — the orchestration policy as one read-only function (`next_action` in
   `scripts/lib.sh`) that maps a change's state file + session log to the
-  single next step (`action`, `tier`, `model`, `set_phase`, `reason`; on
-  `check` also `also: verify` + `also_model`, a read-only step to run
-  concurrently). The
+  single next step (`action`, `tier`, `model`, `set_phase`, `reason`,
+  `prompt` for a role-bearing action; on `check` also `also: verify` +
+  `also_model` + `also_prompt`, a read-only step to run concurrently). The
   agent does the step and records results; it never re-derives the
   lifecycle from prose. Caps live beside it: `FIX_CAP`, `PROPOSE_CAP`,
   `ADVISOR_CAP`. Its action set includes `tasks-open` (records the
@@ -219,12 +219,31 @@
   introduce (dependency, abstraction, public signature, widened seam).
   The critic checks it names real risks for the seam; Verify grades the
   diff against it as against any requirement.
+- **Role prompt**: the engine's own dispatch text for a role,
+  `scripts/roles/<role>.md` — one per `ROLES` entry (`proposer`, `critic`,
+  `worker`, `unit-critic`, `verifier`), at most 20 lines, no heading,
+  naming its role's invariant strings verbatim. `next` prints
+  `prompt: <path>` (and `also_prompt:` for the Verify beside `check`)
+  before any `overlay:`/`also_overlay:` line; `scripts/run-change roles
+  prompt --store <slug> --role <role>` prints it, then — when the store
+  has one — a blank line and the overlay, engine prompt always first.
+- **Anchor**: one of six fixed phrases; a role prompt repeats each anchor
+  assigned to its role exactly twice — once on its first line, once on its
+  last — and carries no other (assignment: `specs/role-prompts`,
+  `tests/run.sh`): `seam`, `fresh read`,
+  `generator/checker split`, `smallest tier that can be wrong safely`,
+  `turns, not tokens`, `the engine records, the worker never asserts`.
+  Inside a role prompt the repetition is not deduplicated; human-facing
+  prose keeps the usual terseness rule (**Hard rule: written for agents**
+  in AUTONOMOUS-ORCHESTRATION.md).
 - **Role overlay**: `<store>/openspec/roles/<role>.md` for one of
   `proposer`, `critic`, `worker`, `unit-critic`, `verifier` — project
   notes appended verbatim to that role's dispatch after the engine's own
   instructions. `next` prints `overlay: <path>` (and `also_overlay:` for
-  the Verify beside `check`); `roles get` prints the text. Adds knowledge,
-  never changes a contract: the engine's text wins on conflict.
+  the Verify beside `check`) immediately after the role's `prompt:` (and
+  `also_prompt:`) line — see **Role prompt**; `roles get` prints the
+  overlay text alone. Adds knowledge, never changes a contract: the
+  engine's text wins on conflict.
 - **Gate tree**: the `gate_tree` state field — the git tree id the last
   *passing* full gate ran on, written by `gate run --mode full` itself.
   The merge lane compares it to the tree after merging trunk in and skips

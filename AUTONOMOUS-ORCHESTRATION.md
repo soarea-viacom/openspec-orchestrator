@@ -529,8 +529,10 @@ ask. Squash-merge produces one commit per change on the project's trunk.
 
 A unit worker's dispatch carries the proposal and delta spec, its unit's
 task ids and their tasks.md text, its file list, its worktree path, the
-engine path, the commands below, and the store's `worker` overlay when
-`next` printed one (**Role overlays**) — never another unit's transcript.
+engine path, the commands below, the engine's worker prompt
+(`scripts/roles/worker.md`, surfaced by `next` as `prompt:`), and the
+store's `worker` overlay when `next` printed one (**Role overlays**) —
+never another unit's transcript.
 
 - **Checks first.** Step 1, before any implementation: write executable
   checks — unit tests in the project's own runner for each requirement the
@@ -698,7 +700,10 @@ prints one step — `action`, `tier`, resolved `model`, the `set_phase` to
 record when the step completes, and the `reason` (which rule fired) — from
 the change's state file and session log alone. On `check` it adds `also:
 verify` and `also_model: <id>`: a second, read-only step to dispatch
-concurrently with the first, never a replacement for it. Actions: `propose`,
+concurrently with the first, never a replacement for it. On a role-bearing
+action `next` also prints `prompt: <path>` right after `reason:` (and
+`also_prompt: <path>` right after `also_model:` on `check`) — the engine
+prompt for that role; see **Role overlays** above. Actions: `propose`,
 `critique`, `revise`, `gate0`, `apply` (tier `none` — bookkeeping only, no
 worker dispatched), `split`, `unit-spawn`, `unit-critique`, `unit-revise`,
 `unit-merge`, `merge-conflict`, `units-merged`, `check`, `fix`, `verify`,
@@ -1036,6 +1041,16 @@ store has none, and refuses a role outside the set. The orchestrator
 appends the text verbatim to the dispatch, after the engine's own
 instructions for that role.
 
+The engine's own instructions for a role are literal text at
+`scripts/roles/<role>.md`, printed before the overlay: `next` prints
+`prompt: <path>` (and `also_prompt:` for the Verify beside `check`)
+immediately before any `overlay:`/`also_overlay:` line, and
+`scripts/run-change roles prompt --store <slug> --role <role>` prints the
+engine prompt text, then — when the store has one — a blank line and the
+overlay text, engine prompt always first. The dispatch for a role is the
+engine prompt, then the overlay, then the checker's `input:` lines (for
+proposer and worker, the task's own material).
+
 An overlay adds; it never overrides. The input contract, the session log
 shapes, the iterate loop, the pass line, and the tier the role runs at are
 the engine's, and where overlay text contradicts them the engine's text
@@ -1126,6 +1141,9 @@ checkable artifact, which is exactly what **Isolation** exists to prevent.
   no abstraction with a single caller.
 - Keep it short: the shortest artifact, rule, commit message, gate summary,
   or reply that is complete.
+- Exception: inside agent-facing dispatch text (`scripts/roles/*.md`),
+  anchor repetition wins and is not deduplicated; human-facing prose keeps
+  the terseness rule above.
 - Leave nothing abandoned: a replaced approach, a helper refactored past,
   a dependency pulled in for a dropped idea — delete it in the same
   change. The full gate's dead-code pass is what enforces this; a worker

@@ -21,6 +21,9 @@ context: |
   example block and this context in the same change; Verify warns otherwise.
   Project notes per role live in openspec/roles/<role>.md (proposer, critic,
   worker, unit-critic, verifier) and are appended to that role's dispatch.
+  The engine's own prompts live at scripts/roles/<role>.md and print before
+  the store's overlay; inside those prompts anchor repetition is kept, not
+  deduplicated, unlike terse human-facing prose.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

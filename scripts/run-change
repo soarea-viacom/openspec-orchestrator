@@ -37,6 +37,7 @@ usage: run-change <command> [args]
   model critic   --store <slug> --name <change> [--unit <u>]
   stage-skills get --store <slug> --stage plan|critic|test
   roles get      --store <slug> --role proposer|critic|worker|unit-critic|verifier
+  roles prompt   --store <slug> --role proposer|critic|worker|unit-critic|verifier
   merge-lane run --store <slug> --project <path> --name <change>
   tasks open     --store <slug> --name <change>
   state init|get|set --store <slug> --name <change> [key value ...]
@@ -682,6 +683,20 @@ cmd_roles_get() {
   return 0
 }
 
+# roles prompt: the engine prompt, then (if any) a blank line and the
+# overlay, so the engine-before-overlay order is fixed here rather than
+# left to the orchestrator.
+cmd_roles_prompt() {
+  parse_opts "$@"
+  [ -n "$STORE" ] && [ -n "$ROLE" ] || usage
+  local p f
+  p="$(role_prompt "$ROLE")" || return 1
+  f="$(role_overlay "$STORE" "$ROLE")" || return 1
+  cat "$p"
+  [ -n "$f" ] && { printf '\n'; cat "$f"; }
+  return 0
+}
+
 cmd_merge_lane_run() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$PROJECT" ] && [ -n "$NAME" ] || usage
@@ -996,6 +1011,7 @@ case "$group $sub" in
   "model critic") cmd_model_critic "$@" ;;
   "stage-skills get") cmd_stage_skills_get "$@" ;;
   "roles get") cmd_roles_get "$@" ;;
+  "roles prompt") cmd_roles_prompt "$@" ;;
   "merge-lane run") cmd_merge_lane_run "$@" ;;
   "tasks open") cmd_tasks_open "$@" ;;
   "state init") cmd_state_init "$@" ;;

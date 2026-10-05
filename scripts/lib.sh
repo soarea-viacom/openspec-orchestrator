@@ -265,6 +265,20 @@ role_overlay() {
   return 0
 }
 
+# Resolved at source time, from lib.sh's own location, so the path holds
+# whatever the caller's cwd is when role_prompt runs.
+ENGINE_ROLES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/roles"
+
+# role_prompt <role> -> path of the engine's scripts/roles/<role>.md. A
+# missing file is an incomplete engine checkout, so it errors rather than
+# letting `next` silently omit the prompt.
+role_prompt() {
+  case " $ROLES " in *" $1 "*) ;; *) echo "unknown role '$1' (expected one of: $ROLES)" >&2; return 1 ;; esac
+  local f="$ENGINE_ROLES_DIR/$1.md"
+  [ -f "$f" ] || { echo "engine role prompt missing: $f" >&2; return 1; }
+  echo "$f"
+}
+
 # role_for_action <action> -> the role whose overlay a `next` action
 # dispatches with, empty for none-tier actions.
 role_for_action() {
@@ -909,6 +923,9 @@ critic_tier()  { critic_pick "$1" "$2" | cut -d' ' -f1; }
 #   reason    the rule that produced this answer
 #   also      a second, read-only step to dispatch concurrently (only on
 #   also_model  `check`: Verify, with its tier-above model id)
+#   also_prompt (`check` only) the engine prompt path for that Verify
+#   prompt    the engine prompt path for the action's role (role-bearing
+#             actions only), printed before any overlay line
 #   running   (phase=applying only, every output but split) the unit slot
 #             holders at this moment, possibly empty
 #   units     (phase=applying only, where the action names units) the
@@ -919,11 +936,14 @@ critic_tier()  { critic_pick "$1" "$2" | cut -d' ' -f1; }
 FIX_CAP=3
 PROPOSE_CAP=2
 
-# emit_overlay <slug> <action> -> prints `overlay: <path>` when the store
-# has an overlay for the action's role.
-emit_overlay() {
+# emit_role_lines <slug> <action> -> for a role-bearing action prints
+# `prompt: <path>`, then `overlay: <path>` when the store has an overlay
+# for that role.
+emit_role_lines() {
   local r; r="$(role_for_action "$2")"
   [ -n "$r" ] || return 0
+  local p; p="$(role_prompt "$r")" || return 1
+  printf 'prompt: %s\n' "$p"
   local ov; ov="$(role_overlay "$1" "$r")"
   [ -n "$ov" ] && printf 'overlay: %s\n' "$ov"
   return 0
@@ -942,7 +962,7 @@ next_action_applying() {
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
-    emit_overlay "$slug" "$1"
+    emit_role_lines "$slug" "$1"
   }
   local ceffort; ceffort="$(checker_effort "$slug")"
 
@@ -1138,7 +1158,7 @@ next_action() {
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
-    emit_overlay "$slug" "$1"
+    emit_role_lines "$slug" "$1"
   }
   fix_tier() { # tier for fix round number (1-based)
     case "$1" in 1) echo standard ;; 2) echo standard ;; *) echo deep ;; esac
@@ -1208,6 +1228,8 @@ next_action() {
           emit check none - "run the full gate and Verify concurrently on the committed tree; record last_gate_result green|red and last_verify_result"
           local vm; vm="$(verify_model "$slug" "$name")" || vm=-
           printf 'also: verify\nalso_model: %s\n' "$vm"
+          local vp; vp="$(role_prompt verifier)" || return 1
+          printf 'also_prompt: %s\n' "$vp"
           local vov; vov="$(role_overlay "$slug" verifier)"
           [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
           emit_effort ;;
