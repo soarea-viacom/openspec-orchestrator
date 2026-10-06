@@ -179,12 +179,15 @@ append`, never edited after the fact.
    proposer's (`scripts/run-change model critic --store <slug> --name
    <name>`; see the generator/checker split under Model/effort routing)
    reads its fixed **input contract** — the originating request, the draft
-   delta spec, the seam list, and the prior critique report on round 2+ —
-   never the proposer's transcript, and never told to go explore the
-   codebase at large; it may read other files only to confirm a seam is
-   real or a dependency claim true. `model critic` prints this contract as
-   `input:` lines after the bare model id — include them verbatim in the
-   dispatch. It judges the draft on five standards. If the project mapped one or more skills to
+   delta spec, the seam list, the store's Project glossary
+   (`openspec/CONTEXT.md`) and ADRs (`openspec/adr/`) when present, and the
+   prior critique report on round 2+ — never the proposer's transcript, and
+   never told to go explore the codebase at large; it may read other files
+   only to confirm a seam is real or a dependency claim true. `model critic`
+   prints this contract as `input:` lines after the bare model id — include
+   them verbatim in the dispatch. When present, a proposal contradicting an
+   ADR is `blocking` unless it names the ADR it supersedes; a non-canonical
+   term is a `warning`. It judges the draft on five standards. If the project mapped one or more skills to
    `critic` (**Project-skill stage mapping**), each of them is dispatched
    **concurrently** with this checker, reads the same inputs, and reports
    alongside it — not instead of it; the step waits for all of them and

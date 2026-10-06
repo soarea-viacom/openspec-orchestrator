@@ -201,10 +201,10 @@
   is `0` or `manual_accept` is set, never otherwise.
 - **Checker input contract**: the fixed set of inputs `model critic` and
   `model verify` print as `input:` lines after the bare model id — critic:
-  request, draft, seam list, prior report; Verify: proposal, seam list,
-  branch diff, the store's `config.yaml` (a new `orchestration.*` key,
-  role overlay, or convention not reflected there is one warning), prior
-  report. Both read no state file to produce this; the
+  request, draft, seam list, Project glossary, ADRs, prior report; Verify:
+  proposal, seam list, branch diff, the store's `config.yaml` (a new
+  `orchestration.*` key, role overlay, or convention not reflected there is
+  one warning), prior report. Both read no state file to produce this; the
   seam-list line names the field rather than resolving it. Other files are
   read only to confirm a seam is real or a dependency claim true, never to
   explore the codebase at large.
@@ -219,6 +219,17 @@
   introduce (dependency, abstraction, public signature, widened seam).
   The critic checks it names real risks for the seam; Verify grades the
   diff against it as against any requirement.
+- **Project glossary**: `<root>/openspec/CONTEXT.md`, plus ADRs in
+  `<root>/openspec/adr/` — the canonical terms and decisions a grill-mode
+  interview records for one project. Distinct from this engine's own
+  glossary (this file); written only by grill mode, read by the proposer
+  and the critic.
+- **Grill mode**: the one pre-change mode (SKILL.md **Grill mode**). First
+  round analyses the request (two or three approaches, no writes);
+  the interview then runs `grilling` and `domain-modeling` to sharpen
+  terms and decisions into the Project glossary and ADRs; an external-mode
+  guard compares `git status --porcelain` before and after; nothing is
+  ever committed.
 - **Role prompt**: the engine's own dispatch text for a role,
   `scripts/roles/<role>.md` — one per `ROLES` entry (`proposer`, `critic`,
   `worker`, `unit-critic`, `verifier`), at most 20 lines, no heading,

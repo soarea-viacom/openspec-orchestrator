@@ -182,7 +182,14 @@ unit-critic:fresh read|generator/checker split|the engine records, the worker ne
 verifier:fresh read|generator/checker split|seam|the engine records, the worker never asserts|turns, not tokens'
 ROLE_INVARIANTS='proposer:--store <slug>
 proposer:seams "<seam>=<file>,<file>;<seam>=<file>"
+proposer:openspec/CONTEXT.md
+proposer:openspec/adr/
+proposer:never edit
 critic:never the generator'"'"'s transcript
+critic:openspec/CONTEXT.md
+critic:openspec/adr/
+critic:names the ADR it supersedes
+critic:non-canonical term
 verifier:never the generator'"'"'s transcript
 worker:`git add -- <files>`, never `-A`
 worker:unit iterate
@@ -253,6 +260,7 @@ check_out "model verify first line is the bare model id" "claude-opus-5-custom" 
 check_out "model verify contract mentions input and seam" "input:" $RC model verify --store teststore --name feat-verify
 check_out "model verify contract names the store config as an input" "$STORE/openspec/config.yaml" $RC model verify --store teststore --name feat-verify
 check_out "model verify contract makes a stale config a warning" "else one warning finding" $RC model verify --store teststore --name feat-verify
+check "model verify contract names no Project glossary or ADRs" bash -c "out=\"\$($RC model verify --store teststore --name feat-verify)\" && case \"\$out\" in *openspec/CONTEXT.md*|*openspec/adr/*) exit 1 ;; esac"
 out_cc="$($RC model critic --store teststore --name feat-critic 2>/dev/null || true)"
 case "$out_cc" in *"config.yaml"*) echo "FAIL model critic contract does not name the store config"; fails=$((fails+1)) ;; *) echo "ok   model critic contract does not name the store config" ;; esac
 $RC session append --store teststore --name feat-infer role worker phase applying model claude-sonnet-5 transcript_id t1
@@ -285,6 +293,20 @@ $RC session append --store teststore --name feat-critic role worker phase propos
 check_out "model critic first line is the bare model id" "claude-opus-5-custom" bash -c "$RC model critic --store teststore --name feat-critic | head -n1"
 check_out "model critic contract mentions input and seam" "input:" $RC model critic --store teststore --name feat-critic
 check_out "model critic contract names the store/name/seams field" "--store teststore --name feat-critic, field seams" $RC model critic --store teststore --name feat-critic
+out_cg="$($RC model critic --store teststore --name feat-critic 2>/dev/null || true)"
+cg_glos="$(printf '%s\n' "$out_cg" | { grep '^input: the Project glossary' || true; } | head -n1)"
+cg_adr="$(printf '%s\n' "$out_cg" | { grep '^input: the ADRs' || true; } | head -n1)"
+check_out "model critic contract names the store's Project glossary" "$STORE/openspec/CONTEXT.md" printf '%s\n' "$cg_glos"
+check_out "model critic contract names the store's ADR dir" "$STORE/openspec/adr/" printf '%s\n' "$cg_adr"
+check_out "model critic contract's ADR line names supersedes" "supersedes" printf '%s\n' "$cg_adr"
+cg_seam_n="$(line_of 'input: seam list' "$out_cg")"
+cg_glos_n="$(line_of 'input: the Project glossary' "$out_cg")"
+cg_adr_n="$(line_of 'input: the ADRs' "$out_cg")"
+cg_prior_n="$(line_of 'input: the prior critic report, if any' "$out_cg")"
+check "model critic contract lists the glossary between the seam and prior-report lines" \
+  bash -c "[ ${cg_seam_n:-999} -lt ${cg_glos_n:-0} ] && [ ${cg_glos_n:-999} -lt ${cg_prior_n:-0} ]"
+check "model critic contract lists the ADRs between the seam and prior-report lines" \
+  bash -c "[ ${cg_seam_n:-999} -lt ${cg_adr_n:-0} ] && [ ${cg_adr_n:-999} -lt ${cg_prior_n:-0} ]"
 
 # initiatives: own record, own critique-round counter, shown as a tree in status
 check "initiative init creates file" $RC initiative init --store teststore --name init-a
@@ -1087,6 +1109,7 @@ check "model critic --unit line 1 is deep over the standard leaf worker" test "$
 check_out "model critic --unit contract mentions checks_commit" "checks_commit" $RC model critic --store storeu3 --name feat-owner --unit a
 check_out "model critic --unit contract mentions screenshot" "screenshot" $RC model critic --store storeu3 --name feat-owner --unit a
 check_out "model critic --unit contract mentions input:" "input:" $RC model critic --store storeu3 --name feat-owner --unit a
+check "model critic --unit contract names no Project glossary or ADRs" bash -c "out=\"\$($RC model critic --store storeu3 --name feat-owner --unit a)\" && case \"\$out\" in *openspec/CONTEXT.md*|*openspec/adr/*) exit 1 ;; esac"
 
 # =====================================================================
 # unit merge: dependency-ordered, scope-checked, conflict handling
@@ -1478,6 +1501,86 @@ check "openspec/config.yaml names scripts/roles/<role>.md inside the context: bl
   bash -c "[ -n '${cfg_hit:-}' ] && [ -n '${ctx_line:-}' ] && [ -n '${next_key_line:-}' ] && [ '$cfg_hit' -gt '$ctx_line' ] && [ '$cfg_hit' -lt '$next_key_line' ]"
 
 check "SKILL.md names at least one prompt: line" bash -c "[ \$(grep -c 'prompt:' $SKILL/SKILL.md) -ge 1 ]"
+
+# docs: grill mode replaces /sdd:explore as the only pre-change mode —
+# see specs/grill-mode/spec.md
+for f in $SKILL/SKILL.md README.md atlas-catalog.json; do
+  check "$f has no /sdd:explore" bash -c "[ \$(grep -c '/sdd:explore' $f) -eq 0 ]"
+done
+check "SKILL.md has exactly one '## Grill mode' heading" bash -c "[ \$(grep -c '^## Grill mode$' $SKILL/SKILL.md) -eq 1 ]"
+check "SKILL.md has no grill-with-docs" bash -c "[ \$(grep -c 'grill-with-docs' $SKILL/SKILL.md) -eq 0 ]"
+
+gm_start="$({ grep -n '^## Grill mode$' $SKILL/SKILL.md || true; } | head -1 | cut -d: -f1)"
+gm_tmp="$TMP/grill_mode_section.txt"
+awk -v s="${gm_start:-0}" 'NR==s{print;started=1;next} started{ if (/^## /) exit; print }' $SKILL/SKILL.md > "$gm_tmp"
+while IFS= read -r lit; do
+  check "SKILL.md Grill mode section names '$lit'" grep -qF -- "$lit" "$gm_tmp"
+done <<'EOF_GRILL'
+Step 0
+two or three approaches
+grilling
+domain-modeling
+<root>/openspec/CONTEXT.md
+<root>/openspec/adr/
+docs/adr/
+git status --porcelain
+no message
+uncommitted
+sharpened request
+Gate 0
+EOF_GRILL
+
+ao_start="$({ grep -n '^## Autonomous only$' $SKILL/SKILL.md || true; } | head -1 | cut -d: -f1)"
+ao_tmp="$TMP/autonomous_only_section.txt"
+awk -v s="${ao_start:-0}" 'NR==s{print;started=1;next} started{ if (/^## /) exit; print }' $SKILL/SKILL.md > "$ao_tmp"
+check "SKILL.md Autonomous only section names grill mode" grep -qF -- "grill mode" "$ao_tmp"
+
+gr_start="$({ grep -n '^## Guardrails$' $SKILL/SKILL.md || true; } | head -1 | cut -d: -f1)"
+gr_tmp="$TMP/guardrails_section.txt"
+awk -v s="${gr_start:-0}" 'NR>=s{print}' $SKILL/SKILL.md > "$gr_tmp"
+check "SKILL.md Guardrails section names Project glossary" grep -qF -- "Project glossary" "$gr_tmp"
+check "SKILL.md Guardrails section names grill mode" grep -qF -- "grill mode" "$gr_tmp"
+
+skill_desc="$(sed -n 's/^description: //p' $SKILL/SKILL.md | head -1)"
+catalog_desc="$(sed -n 's/.*"description": "\(.*\)",$/\1/p' atlas-catalog.json | head -1)"
+check "SKILL.md and atlas-catalog.json descriptions are identical" test "$skill_desc" = "$catalog_desc"
+case "$skill_desc" in
+  *"grill mode"*) echo "ok   SKILL.md description names grill mode" ;;
+  *) echo "FAIL SKILL.md description names grill mode"; fails=$((fails+1)) ;;
+esac
+
+desc_full="$({ grep '^description: ' $SKILL/SKILL.md || true; } | head -1)"
+colon_count="$(printf '%s\n' "$desc_full" | { grep -o ': ' || true; } | wc -l | tr -d ' ')"
+hash_count="$(printf '%s\n' "$desc_full" | { grep -o ' #' || true; } | wc -l | tr -d ' ')"
+check "SKILL.md description: line has exactly one ': '" test "$colon_count" = 1
+check "SKILL.md description: line has no ' #'" test "$hash_count" = 0
+
+check "CONTEXT.md defines Project glossary" grep -qF -- '**Project glossary**' $SKILL/CONTEXT.md
+check "CONTEXT.md defines Grill mode" grep -qF -- '**Grill mode**' $SKILL/CONTEXT.md
+cic_start="$({ grep -n -- '\*\*Checker input contract\*\*' $SKILL/CONTEXT.md || true; } | head -1 | cut -d: -f1)"
+cic_tmp="$TMP/checker_input_contract.txt"
+awk -v s="${cic_start:-0}" 'NR==s{print;started=1;next} started{ if (/^- \*\*/) exit; print }' $SKILL/CONTEXT.md > "$cic_tmp"
+check "CONTEXT.md Checker input contract entry names Project glossary" grep -qF -- "Project glossary" "$cic_tmp"
+
+ctx2_line="$(grep -n '^context:' openspec/config.yaml | head -1 | cut -d: -f1)"
+ctx2_next="$(awk -v s="${ctx2_line:-0}" 'NR>s && /^[a-zA-Z_]+:/{print NR; exit}' openspec/config.yaml)"
+ctx2_hit="$({ grep -n 'openspec/CONTEXT.md' openspec/config.yaml || true; } | head -1 | cut -d: -f1)"
+check "openspec/config.yaml names openspec/CONTEXT.md inside the context: block" \
+  bash -c "[ -n '${ctx2_hit:-}' ] && [ -n '${ctx2_line:-}' ] && [ -n '${ctx2_next:-}' ] && [ '$ctx2_hit' -gt '$ctx2_line' ] && [ '$ctx2_hit' -lt '$ctx2_next' ]"
+
+check "README names /openspec-orchestrator grill" grep -qF -- "/openspec-orchestrator grill" README.md
+readme_ctx_row="$({ grep -F '[`CONTEXT.md`]' README.md || true; } | head -1)"
+case "$readme_ctx_row" in
+  *"openspec/CONTEXT.md"*) echo "ok   README CONTEXT.md layout row names openspec/CONTEXT.md" ;;
+  *) echo "FAIL README CONTEXT.md layout row names openspec/CONTEXT.md"; fails=$((fails+1)) ;;
+esac
+
+crit_start="$({ grep -n -- '\*\*Critique\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md || true; } | head -1 | cut -d: -f1)"
+crit_end="$({ grep -n -- 'The critic writes a \*\*critique report\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md || true; } | head -1 | cut -d: -f1)"
+crit_tmp="$TMP/critique_contract.txt"
+awk -v s="${crit_start:-0}" -v e="${crit_end:-0}" 'NR>=s && NR<=e' $SKILL/AUTONOMOUS-ORCHESTRATION.md > "$crit_tmp"
+check "AUTONOMOUS-ORCHESTRATION.md Critique input contract names openspec/CONTEXT.md" grep -qF -- "openspec/CONTEXT.md" "$crit_tmp"
+check "AUTONOMOUS-ORCHESTRATION.md Critique input contract names openspec/adr/" grep -qF -- "openspec/adr/" "$crit_tmp"
 
 echo
 [ "$fails" -eq 0 ] && echo "all tests passed" || { echo "$fails test(s) failed"; exit 1; }

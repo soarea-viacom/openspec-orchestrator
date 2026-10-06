@@ -93,7 +93,7 @@ flowchart TD
 | [`scripts/run-change`](skills/openspec-orchestrator/scripts/run-change) | Mechanical engine: slots, workspaces/worktrees, gates, merge lane, state and session-log bookkeeping. |
 | [`scripts/lib.sh`](skills/openspec-orchestrator/scripts/lib.sh) | Shared helpers: store/registry lookups, state-file format, model routing, project-skill stage mapping, local-vs-external guard. |
 | [`scripts/roles/`](skills/openspec-orchestrator/scripts/roles/) | Literal dispatch text per engine role (proposer, critic, worker, unit-critic, verifier). |
-| [`CONTEXT.md`](skills/openspec-orchestrator/CONTEXT.md) | Domain glossary: Store, Change, Worker, Advisor, Blackboard, Seam list, etc. |
+| [`CONTEXT.md`](skills/openspec-orchestrator/CONTEXT.md) | Domain glossary: Store, Change, Worker, Advisor, Blackboard, Seam list, etc. Distinct from a target project's own Project glossary, which grill mode writes to `<root>/openspec/CONTEXT.md`. |
 | [`releases.json`](skills/openspec-orchestrator/releases.json) | Version history read by Atlas; written by `atlas bump`, never by hand. |
 | [`tests/run.sh`](tests/run.sh) | Black-box tests for `run-change`, via its CLI only. Not installed. |
 | [`docs/proposals/`](docs/proposals/) | Design records for engine extensions. Adopted proposals reference where they landed; others are marked as sketches. |
@@ -171,10 +171,11 @@ Invoke from inside, or pointed at, a target project:
 /openspec-orchestrator add rate limiting to the /login endpoint
 ```
 
-For read-only discovery with no artifacts written:
+To grill a plan before opening a change — weigh approaches, then sharpen
+terms and decisions into the Project glossary and ADRs:
 
 ```
-/sdd:explore how should we approach rate limiting?
+/openspec-orchestrator grill how should we approach rate limiting?
 ```
 
 ### Execution sequence

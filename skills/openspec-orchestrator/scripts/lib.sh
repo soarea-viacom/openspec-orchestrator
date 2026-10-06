@@ -157,6 +157,9 @@ checker_inputs() {
       printf 'input: the originating request\n'
       printf 'input: the draft delta spec (+ design.md)\n'
       printf '%s\n' "$seam_line"
+      # Store-root paths, not the worktree: grill mode leaves these uncommitted in the root.
+      printf 'input: the Project glossary, if present — %s/openspec/CONTEXT.md: a non-canonical term is one warning finding\n' "$(store_path "$slug")"
+      printf 'input: the ADRs, if present — %s/openspec/adr/: a proposal contradicting an ADR is blocking unless it names the ADR it supersedes\n' "$(store_path "$slug")"
       ;;
     verify)
       printf 'input: the proposal + delta spec\n'

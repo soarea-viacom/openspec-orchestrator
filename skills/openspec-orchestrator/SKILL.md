@@ -1,6 +1,6 @@
 ---
 name: openspec-orchestrator
-description: Spec-driven development workflow (propose a delta spec before touching code, implement against the approved proposal with tests, archive into the living spec). Routes OpenSpec artifacts to whichever root fits the project — an already-existing local openspec/ folder (used as-is, always takes priority), or an external store when there is no local folder, asking the user which to use for a project that has neither. When routed externally, the target project's directory and git history are otherwise untouched by OpenSpec. Always runs autonomously through Propose/Apply/Archive, but always pauses once per proposal round — before any code is written — for the human to accept a short resume of what is about to be implemented (or ask for the full proposal, or request changes, which redrafts and shows a new resume); beyond that mandatory pause it asks the human only when something is wrong, and there is no other step-by-step mode. Use when the user wants to add/change a feature under spec control, invokes /sdd:explore for read-only discovery, or asks to orchestrate/route OpenSpec locally or to an external store.
+description: Spec-driven development workflow (propose a delta spec before touching code, implement against the approved proposal with tests, archive into the living spec). Routes OpenSpec artifacts to whichever root fits the project — an already-existing local openspec/ folder (used as-is, always takes priority), or an external store when there is no local folder, asking the user which to use for a project that has neither. When routed externally, the target project's directory and git history are otherwise untouched by OpenSpec. Always runs autonomously through Propose/Apply/Archive, but always pauses once per proposal round — before any code is written — for the human to accept a short resume of what is about to be implemented (or ask for the full proposal, or request changes, which redrafts and shows a new resume); beyond that mandatory pause it asks the human only when something is wrong, and there is no other step-by-step mode. Use when the user wants to add/change a feature under spec control, wants to grill a plan before a change (grill mode — weigh approaches, then sharpen terms and decisions into the Project glossary and ADRs), or asks to orchestrate/route OpenSpec locally or to an external store.
 ---
 
 # OpenSpec Orchestrator
@@ -133,9 +133,57 @@ go-ahead, even if the request is phrased as a single phase ("just draft
 the proposal", "only apply"). Treat such a request as the whole change and
 run it, subject to Gate 0; if the human genuinely wants to stop early
 beyond that, they say so and the change is left `blocked` per the
-orchestration doc. The only command that is not a full run is
-`/sdd:explore`, which is read-only discovery and writes nothing — it
-precedes a change, it is not a phase of one.
+orchestration doc. The only invocation that is not a full run is
+grill mode, which precedes a change and is not a phase of one; Gate 0 stays the
+only pause inside a change.
+
+## Grill mode
+
+Grill mode precedes a change: there is no change name, state file, slot or
+worktree, so nothing for `next` to decide. The orchestrator runs it
+directly — the same way it runs Gate 0's presentation rules — when a
+request asks to grill a plan or idea before a change, e.g.
+`/openspec-orchestrator grill how should we approach rate limiting?`. A
+request to implement something is a change, never grill mode.
+
+Sequence:
+
+1. **Preflight.** Step 0 checks 1–3, then Steps 1–2 resolve the root
+   (local, store, or ask). Check 4, the trunk preflight, does not run — it
+   gates opening a change, and grill mode opens none.
+2. **External-mode snapshot.** External mode only: before the first
+   round, capture the project's `git status --porcelain` (run as
+   `git -C <project> status --porcelain`) in the conversation — no file
+   written. Local mode skips this; the glossary
+   and ADRs land under the project's own `openspec/` by design, so its
+   status is expected to change there.
+3. **First round = analysis.** Read the relevant code
+   boundaries, existing specs and active changes; present two or three approaches
+   with trade-offs, risks and a recommendation. This round
+   writes nothing. The human may stop here — with no term or decision
+   resolved, nothing is written.
+4. **Interview.** The orchestrator calls the Skill tool for `grilling` and
+   for `domain-modeling` itself, telling domain-modeling the Project
+   glossary is `<root>/openspec/CONTEXT.md` and ADRs go in
+   `<root>/openspec/adr/`, the same relative path in both modes; a target
+   project's own root `CONTEXT.md` and `docs/adr/`, if present, are
+   vocabulary to read, never files to write. Missing skills degrade with
+   no message: no `domain-modeling` → interview, no glossary or ADR
+   writes; no `grilling` → the orchestrator's own inline rounds (numbered
+   questions, a recommended answer each, wait for answers); neither →
+   inline rounds, no writes.
+5. **External-mode compare.** External mode only: run the same command
+   again and compare it byte for byte against the snapshot.
+   Different → stop, show the human the lines that differ, and make no
+   handoff and no offer to start a change.
+6. **Handoff.** Grill mode never commits and never runs a git command
+   that writes; its glossary and ADR writes stay uncommitted, like every
+   other root artifact. The session ends with a sharpened request
+   summary — the request restated in the glossary's canonical terms,
+   naming any ADR written — and an offer to start the change with it:
+   starting means invoking the full run with that summary as the
+   request. No offer when the external-mode compare above tripped. Gate 0
+   is still the only pause once that change opens.
 
 ## Optional convenience
 
@@ -146,6 +194,7 @@ In **external mode**, `openspec workset create <slug> --member project=<project-
 - Never run `openspec init` in a project, in either mode. A local root this skill uses is either one the project already had, or one laid down by `openspec store setup --path <project> --no-init-git` (Step 2) — never by `openspec init`.
 - Missing prerequisites are installed globally (user-level) only — never as project dependencies, project `.claude/` entries, or any other file in the target repository. One exception: a UI unit's worker may add `playwright` itself as a target-project devDependency, the one dependency a worker may add (see **Unit workers** in AUTONOMOUS-ORCHESTRATION.md) — listed in that unit's files and visible in the Gate 2 diffstat; the Playwright browser binary itself is still a machine-level cache download, done once with the human's approval, never a project file.
 - **External mode only:** never write to any path under the project root for OpenSpec purposes. The sole exception is `git init` plus an initial commit when the project has no repo or no commit yet (Step 0, check 3) — that is project infrastructure the branch/worktree model requires, not an artifact. In local mode this restriction does not apply by design — the user chose to keep artifacts in the project — but the only files this skill itself adds under the project root are `.openspec-store/store.yaml` (Step 2) and whatever the three phases legitimately write under `openspec/` (proposals, deltas, specs, tasks) and, per the branch/worktree model, `.git/`.
+- Only grill mode writes the Project glossary (`<root>/openspec/CONTEXT.md`) and ADRs (`<root>/openspec/adr/`); Propose and Archive may cite an ADR or name the one a proposal supersedes, never edit either.
 - Never omit `--store <slug>` on an OpenSpec CLI call once a root is resolved — a bare command silently falls back to the current directory as root, which would put artifacts in the wrong place. This applies in both modes.
 - **Local takes priority, never silently:** if a project has a local `openspec/` folder, use it — do not refuse, and do not fall back to an external store instead, even if one is already registered for this project's slug (Step 1). If both exist, say so once to the user and explain local is being used; never delete or modify the bypassed external store.
 - **Never run `openspec store remove` on a local-mode store.** Its `local_path` is the project root, so `--yes` deletes the project's `openspec/` and any other untracked project files. A local-mode store, once registered, stays registered for the project's life; there is no supported unregister-only path.
