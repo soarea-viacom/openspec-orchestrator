@@ -206,6 +206,31 @@ gate_command() {
   ' "$cfg" 2>/dev/null || true
 }
 
+gate_timeout() {
+  local cfg n
+  cfg="$(store_config "$1")"
+  n="$(awk '/^orchestration:/{f=1;next} f && /^[a-zA-Z]/{exit} f && /^[[:space:]]+gate_timeout:/{print $2; exit}' "$cfg" 2>/dev/null || true)"
+  echo "${n:-1800}"
+}
+
+# run_gate <store-slug> <shell-code>: a gate that waits on stdin or a server
+# that never exits would otherwise hang the loop with no signal. The code runs
+# in its own process group so the TERM/KILL reaches npm, vite and browsers it
+# spawned, not just the shell; perl because macOS ships no `timeout`.
+run_gate() {
+  local secs; secs="$(gate_timeout "$1")"
+  local status=0
+  perl -e '
+    my $t = shift; my $pid = fork;
+    if (!$pid) { setpgrp(0, 0); exec @ARGV or exit 127 }
+    $SIG{ALRM} = sub { kill "TERM", -$pid; sleep 5; kill "KILL", -$pid; waitpid($pid, 0); exit 124 };
+    alarm $t; waitpid($pid, 0);
+    exit($? & 127 ? 128 + ($? & 127) : $? >> 8);
+  ' "$secs" bash -c "$2" </dev/null || status=$?
+  [ "$status" -ne 124 ] || echo "gate timed out after ${secs}s (orchestration.gate_timeout)" >&2
+  return "$status"
+}
+
 # model_for_tier <store-slug> <tier> -> model id for mechanical|standard|deep|max
 # (the `none` tier runs no model — it's plain bash bookkeeping). Reads
 # orchestration.model_<tier> from the store's config first; falls back to

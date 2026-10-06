@@ -649,6 +649,24 @@ check_out "gate run --trunk red names the trunk as red" "is red" bash -c "$RC ga
 check "gate run --trunk red exits non-zero" bash -c "! $RC gate run --store teststore2 --project '$PROJECT' --mode full --trunk >/dev/null 2>&1"
 check "gate run --trunk red leaves no trunk-preflight worktree behind" bash -c "! git -C '$PROJECT' worktree list | grep -q trunk-preflight"
 
+# gate_timeout: a gate blocked on stdin, with a spawned child, is killed as a group
+mkdir -p "$TMP/store3/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  teststore3:
+    local_path: $TMP/store3
+EOF
+cat > "$TMP/store3/openspec/config.yaml" <<'EOF'
+orchestration:
+  concurrency: 1
+  gate_timeout: 2
+  gate_full: "sleep 31337 & cat; wait"
+EOF
+t0=$SECONDS
+check_out "gate run names a timed-out gate" "gate timed out after 2s" bash -c "$RC gate run --store teststore3 --project '$PROJECT' --mode full --trunk 2>&1; true"
+check "gate run timeout returns within the limit, not when stdin closes" test $((SECONDS - t0)) -lt 15
+check "gate run timeout exits 124" bash -c "$RC gate run --store teststore3 --project '$PROJECT' --mode full --trunk >/dev/null 2>&1; test \$? -eq 124"
+check "gate run timeout kills the gate's children" bash -c "! pgrep -f 'sleep 31337'"
+
 # tasks open: unchecked tasks.md lines, recorded as manual_tasks_open
 $RC state init --store teststore --name feat-tasks
 mkdir -p "$STORE/openspec/changes/feat-tasks"

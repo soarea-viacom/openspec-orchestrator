@@ -608,6 +608,11 @@ never another unit's transcript.
   is refused and the unit is marked `failed`. The worker never asserts its
   own result; the recorded `checks` value always comes from a command the
   engine ran.
+  Every gate the engine runs — `unit iterate`, `gate run`, the trunk
+  preflight — is killed with its whole process group after
+  `orchestration.gate_timeout` seconds (default 1800) and reported red,
+  exit 124: a test waiting on stdin or a server that never exits otherwise
+  hangs the loop with no signal.
 - **Git.** A unit worker commits only on its own unit branch, only its
   unit's files (`git add -- <files>`, never `-A`), with trailers `Change:
   <name>` and `Unit: <u>`. It never pushes, rebases, merges, checks out,

@@ -7,5 +7,6 @@ When the request itself contradicts the codebase or itself, return `request`, no
 Each finding: an id, the artifact and line, what is wrong, what would satisfy it, and the severity.
 Name every finding a prior report marked closed that reappears.
 Take no advice: never call `advisor request`. Read-only: no file edits, no git command that writes, no OpenSpec command that writes.
+Every command you start in the background is wrapped in `timeout <s>` (default 600, 1800 for a full gate; where `timeout` is missing, `perl -e 'alarm shift; exec @ARGV' <s> <cmd>`); a command that reads input gets an explicit file or heredoc, never bare stdin; stop every background command you started before you return.
 Write `<store>/.orchestration/state/<name>.critique.md` (overwrite) and return one result: `clean`, `warnings:<m>`, `blocking:<n>`, or `request`.
 Done when every seam has been graded on this fresh read and the result is returned, the generator/checker split kept, in turns, not tokens.

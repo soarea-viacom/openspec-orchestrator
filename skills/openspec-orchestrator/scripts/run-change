@@ -201,7 +201,7 @@ cmd_gate_run_trunk() {
   trap "$(printf 'git -C %q worktree remove --force %q >/dev/null 2>&1 || true; git -C %q worktree prune >/dev/null 2>&1 || true' "$PROJECT" "$tmp" "$PROJECT")" EXIT
   git -C "$PROJECT" worktree add --detach "$tmp" "$ref" >&2
   local status=0
-  ( cd "$tmp" && eval "$gcmd" ) || status=$?
+  ( cd "$tmp" && run_gate "$STORE" "$gcmd" ) || status=$?
   [ "$status" -eq 0 ] || echo "trunk $ref is red under gate_full: exit $status" >&2
   return "$status"
 }
@@ -227,7 +227,7 @@ cmd_gate_run() {
     wt="$(workspace_path "$STORE" "$NAME")"
   fi
   [ -d "$wt" ] || { echo "no workspace for change $NAME (expected $wt) — run workspace create first" >&2; return 1; }
-  ( cd "$wt" && eval "$gcmd" )
+  ( cd "$wt" && run_gate "$STORE" "$gcmd" )
   # A passing full gate records the tree it ran on. merge-lane skips its
   # rerun when the merged tree is identical: same tree, same result.
   # --unit means this ran in a unit's worktree, not the change's tree, so
@@ -499,7 +499,8 @@ cmd_unit_iterate() {
   # non-UI units never pay for Playwright on every iteration.
   local ucmd=""; [ "$is_ui" = 1 ] && ucmd="$(gate_command "$STORE" ui)"
   local status_run=0
-  ( cd "$unit_wt" && export UNIT_SCREENSHOT="$shot" UNIT_NAME="$UNIT" && eval "$gcmd" && { [ -z "$ucmd" ] || eval "$ucmd"; } ) || status_run=$?
+  local both="$gcmd"; [ -z "$ucmd" ] || both="( $gcmd ) && ( $ucmd )"
+  ( cd "$unit_wt" && export UNIT_SCREENSHOT="$shot" UNIT_NAME="$UNIT" && run_gate "$STORE" "$both" ) || status_run=$?
   local result=green
   [ "$status_run" -eq 0 ] || result=red
   [ "$is_ui" = 1 ] && { [ -f "$shot" ] || result=red; }
