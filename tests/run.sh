@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Black-box tests for scripts/run-change through its CLI interface only.
+# Black-box tests for skills/openspec-orchestrator/scripts/run-change through its CLI interface only.
 # Substitutes both seams: OPENSPEC_STORE_REGISTRY -> temp registry,
 # --project -> temp git clone of a temp bare origin.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
-RC=scripts/run-change
+SKILL=skills/openspec-orchestrator
+RC=$SKILL/scripts/run-change
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -66,16 +67,16 @@ line_of() { # line_of <exact-line-or-prefix> <text> -> 1-based number of the
 
 # syntax first: a parse error would make every check below fail for the
 # same reason, so stop here instead of drowning it in noise.
-check "run-change parses" bash -n scripts/run-change
-check "lib.sh parses" bash -n scripts/lib.sh
+check "run-change parses" bash -n $SKILL/scripts/run-change
+check "lib.sh parses" bash -n $SKILL/scripts/lib.sh
 check "run.sh parses" bash -n tests/run.sh
 [ "$fails" -eq 0 ] || { echo "syntax errors — not running behavior tests"; exit 1; }
 
 # dead-code pass (the bash stand-in for knip): every function defined in the
 # engine must be referenced somewhere other than its own definition.
 dead=""
-for fn in $(grep -ohE '^[a-z_]+\(\)' scripts/lib.sh scripts/run-change | tr -d '()'); do
-  if ! grep -hE "\b$fn\b" scripts/lib.sh scripts/run-change tests/run.sh | grep -qvE "^$fn\(\)"; then
+for fn in $(grep -ohE '^[a-z_]+\(\)' $SKILL/scripts/lib.sh $SKILL/scripts/run-change | tr -d '()'); do
+  if ! grep -hE "\b$fn\b" $SKILL/scripts/lib.sh $SKILL/scripts/run-change tests/run.sh | grep -qvE "^$fn\(\)"; then
     dead="$dead $fn"
   fi
 done
@@ -170,9 +171,9 @@ check_out "model get honors store override" "claude-opus-5-custom" $RC model get
 # stage -> project skill(s) (docs/proposals/skill-stage-mapping.md)
 check_out "stage-skills get is empty when stage_skills is unset" "" $RC stage-skills get --store teststore --stage plan
 
-# engine role prompts: scripts/roles/<role>.md. The anchor assignment lives
+# engine role prompts: $SKILL/scripts/roles/<role>.md. The anchor assignment lives
 # only here and in the spec; nothing at runtime reads it.
-check "scripts/roles holds exactly the five role files" test "$(LC_ALL=C ls scripts/roles 2>/dev/null | tr '\n' ' ')" = "critic.md proposer.md unit-critic.md verifier.md worker.md "
+check "$SKILL/scripts/roles holds exactly the five role files" test "$(LC_ALL=C ls $SKILL/scripts/roles 2>/dev/null | tr '\n' ' ')" = "critic.md proposer.md unit-critic.md verifier.md worker.md "
 ANCHORS='seam|fresh read|generator/checker split|smallest tier that can be wrong safely|turns, not tokens|the engine records, the worker never asserts'
 ROLE_ANCHORS='proposer:seam|generator/checker split|smallest tier that can be wrong safely|turns, not tokens
 critic:fresh read|generator/checker split|seam|turns, not tokens
@@ -193,7 +194,7 @@ anchor_n() { # anchor_n <anchor> <text> -> occurrences; seam as a whole word, no
 }
 check "anchor count: seam skips the <seam> placeholder" test "$(anchor_n seam 'set seams "<seam>=a" per seam')" = 1
 while IFS=: read -r role assigned; do
-  f="scripts/roles/$role.md"
+  f="$SKILL/scripts/roles/$role.md"
   text=""; [ -f "$f" ] && text="$(cat "$f")"
   first="$(printf '%s\n' "$text" | sed -n 1p)"; last="$(printf '%s\n' "$text" | sed -n '$p')"
   check "role prompt $role: at most 20 lines, no heading" bash -c "[ -f '$f' ] && [ \$(wc -l < '$f') -le 20 ] && ! grep -q '^#' '$f'"
@@ -207,7 +208,7 @@ while IFS=: read -r role assigned; do
   done
 done <<<"$ROLE_ANCHORS"
 while IFS=: read -r role s; do
-  check "role prompt $role quotes: $s" grep -qF -- "$s" "scripts/roles/$role.md"
+  check "role prompt $role quotes: $s" grep -qF -- "$s" "$SKILL/scripts/roles/$role.md"
 done <<<"$ROLE_INVARIANTS"
 
 # role overlays: <store>/openspec/roles/<role>.md, text printed verbatim
@@ -216,7 +217,7 @@ check "roles get with no overlay exits 0" $RC roles get --store teststore --role
 check_out "roles get refuses an unknown role" "unknown role" bash -c "$RC roles get --store teststore --role reviewer 2>&1; true"
 check "roles get with an unknown role exits non-zero" bash -c "! $RC roles get --store teststore --role reviewer >/dev/null 2>&1"
 check "roles prompt with no overlay exits 0" $RC roles prompt --store teststore --role verifier
-check "roles prompt with no overlay prints exactly the engine prompt" bash -c "diff <($RC roles prompt --store teststore --role verifier) scripts/roles/verifier.md"
+check "roles prompt with no overlay prints exactly the engine prompt" bash -c "diff <($RC roles prompt --store teststore --role verifier) $SKILL/scripts/roles/verifier.md"
 check_out "roles prompt refuses an unknown role" "unknown role" bash -c "$RC roles prompt --store teststore --role reviewer 2>&1; true"
 check "roles prompt with an unknown role exits non-zero" bash -c "! $RC roles prompt --store teststore --role reviewer >/dev/null 2>&1"
 mkdir -p "$STORE/openspec/roles"
@@ -225,7 +226,7 @@ printf 'Run tests with ./tests/run.sh; a red check prints FAIL.\n' > "$STORE/ope
 check_out "roles get prints the overlay text" "named test" $RC roles get --store teststore --role critic
 check_out "roles get is per role" "FAIL" $RC roles get --store teststore --role worker
 rp_out="$($RC roles prompt --store teststore --role critic 2>/dev/null || true)"
-rp_last="$(line_of "$(tail -n1 scripts/roles/critic.md 2>/dev/null || true)" "$rp_out")"
+rp_last="$(line_of "$(tail -n1 $SKILL/scripts/roles/critic.md 2>/dev/null || true)" "$rp_out")"
 rp_ov="$(line_of "$(head -n1 "$STORE/openspec/roles/critic.md")" "$rp_out")"
 check "roles prompt prints the engine prompt's last line before the overlay's first" test "${rp_last:-999}" -lt "${rp_ov:-0}"
 check "roles get with an overlay still prints only the overlay text" test "$($RC roles get --store teststore --role critic)" = "$(cat "$STORE/openspec/roles/critic.md")"
@@ -319,14 +320,14 @@ N="$RC next --store teststore --name feat-next"
 $RC state init --store teststore --name feat-next
 check_out "next: fresh change -> propose at deep" "action: propose" $N
 check_out "next: propose model is deep" "model: claude-opus-5-custom" $N
-check_line "next: propose prints the engine proposer prompt" "prompt: $PWD/scripts/roles/proposer.md" $N
+check_line "next: propose prints the engine proposer prompt" "prompt: $PWD/$SKILL/scripts/roles/proposer.md" $N
 out_pr="$($N)"
 case "$out_pr" in *"overlay:"*) echo "FAIL next: propose prints no overlay without a proposer overlay"; fails=$((fails+1)) ;; *) echo "ok   next: propose prints no overlay without a proposer overlay" ;; esac
 $RC session append --store teststore --name feat-next role worker phase proposed tier deep model claude-opus-5-plain transcript_id p1
 check_out "next: draft exists -> critique" "action: critique" $N
 check_out "next: critique of a deep draft runs at max" "tier: max" $N
 check_out "next: critique names the store's critic overlay" "overlay: $STORE/openspec/roles/critic.md" $N
-check_line "next: critique prints the engine critic prompt" "prompt: $PWD/scripts/roles/critic.md" $N
+check_line "next: critique prints the engine critic prompt" "prompt: $PWD/$SKILL/scripts/roles/critic.md" $N
 out_cr="$($N)"
 cr_reason="$(line_of reason: "$out_cr")"; cr_prompt="$(line_of prompt: "$out_cr")"; cr_ov="$(line_of overlay: "$out_cr")"
 check "next: critique prompt: is the line right after reason:" test "${cr_prompt:-x}" = "$(( ${cr_reason:-0} + 1 ))"
@@ -381,7 +382,7 @@ check_out "next: check also dispatches verify concurrently" "also: verify" $N
 check_out "next: concurrent verify gets the distinct-model id" "also_model: claude-opus-5-custom" $N
 out_chk="$($N)"
 case "$out_chk" in *"also_overlay:"*) echo "FAIL next: check prints no also_overlay without a verifier overlay"; fails=$((fails+1)) ;; *) echo "ok   next: check prints no also_overlay without a verifier overlay" ;; esac
-check_line "next: check prints the engine verifier prompt for the concurrent Verify" "also_prompt: $PWD/scripts/roles/verifier.md" $N
+check_line "next: check prints the engine verifier prompt for the concurrent Verify" "also_prompt: $PWD/$SKILL/scripts/roles/verifier.md" $N
 chk_model="$(line_of also_model: "$out_chk")"; chk_prompt="$(line_of also_prompt: "$out_chk")"
 check "next: check also_prompt: is the line right after also_model:" test "${chk_prompt:-x}" = "$(( ${chk_model:-0} + 1 ))"
 printf 'Verify the bump in releases.json matches the SKILL.md change.\n' > "$STORE/openspec/roles/verifier.md"
@@ -1443,24 +1444,24 @@ esac
 # editor would look (AUTONOMOUS-ORCHESTRATION.md, CONTEXT.md, config.yaml,
 # SKILL.md) — see specs/role-prompts/spec.md "Style split documented"
 # =====================================================================
-hr_line="$(grep -n '^## Hard rule: written for agents' AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
-ro_line="$(grep -n '^### Role overlays' AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
-fr_line="$(grep -n '^### Fix rounds' AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
+hr_line="$(grep -n '^## Hard rule: written for agents' $SKILL/AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
+ro_line="$(grep -n '^### Role overlays' $SKILL/AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
+fr_line="$(grep -n '^### Fix rounds' $SKILL/AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
 hr_hit=""; ro_hit=""
-for n in $(grep -n 'scripts/roles' AUTONOMOUS-ORCHESTRATION.md | cut -d: -f1); do
+for n in $(grep -n 'scripts/roles' $SKILL/AUTONOMOUS-ORCHESTRATION.md | cut -d: -f1); do
   [ -n "$hr_line" ] && [ "$n" -gt "$hr_line" ] && hr_hit=1
   [ -n "$ro_line" ] && [ -n "$fr_line" ] && [ "$n" -gt "$ro_line" ] && [ "$n" -lt "$fr_line" ] && ro_hit=1
 done
-check "AUTONOMOUS-ORCHESTRATION.md names scripts/roles in the Hard rule section" test -n "$hr_hit"
-check "AUTONOMOUS-ORCHESTRATION.md names scripts/roles in the Role overlays section" test -n "$ro_hit"
+check "$SKILL/AUTONOMOUS-ORCHESTRATION.md names scripts/roles in the Hard rule section" test -n "$hr_hit"
+check "$SKILL/AUTONOMOUS-ORCHESTRATION.md names scripts/roles in the Role overlays section" test -n "$ro_hit"
 
-check "CONTEXT.md defines Role prompt" bash -c "grep -qE -- '\*\*Role prompt\*\*' CONTEXT.md"
-check "CONTEXT.md defines Anchor" bash -c "grep -qE -- '\*\*Anchor\*\*' CONTEXT.md"
-anchor_start="$(grep -n -- '\*\*Anchor\*\*' CONTEXT.md | head -1 | cut -d: -f1)"
+check "$SKILL/CONTEXT.md defines Role prompt" bash -c "grep -qE -- '\*\*Role prompt\*\*' $SKILL/CONTEXT.md"
+check "$SKILL/CONTEXT.md defines Anchor" bash -c "grep -qE -- '\*\*Anchor\*\*' $SKILL/CONTEXT.md"
+anchor_start="$(grep -n -- '\*\*Anchor\*\*' $SKILL/CONTEXT.md | head -1 | cut -d: -f1)"
 anchor_tmp="$TMP/anchor_entry.txt"
-awk -v s="${anchor_start:-0}" 'NR==s{print;started=1;next} started{ if (/^- \*\*/) exit; print }' CONTEXT.md > "$anchor_tmp"
+awk -v s="${anchor_start:-0}" 'NR==s{print;started=1;next} started{ if (/^- \*\*/) exit; print }' $SKILL/CONTEXT.md > "$anchor_tmp"
 while IFS= read -r lit; do
-  check "CONTEXT.md Anchor entry names '$lit'" grep -qF -- "$lit" "$anchor_tmp"
+  check "$SKILL/CONTEXT.md Anchor entry names '$lit'" grep -qF -- "$lit" "$anchor_tmp"
 done <<'EOF_ANCHORS'
 seam
 fresh read
@@ -1476,7 +1477,7 @@ cfg_hit="$(grep -n 'scripts/roles/<role>.md' openspec/config.yaml | head -1 | cu
 check "openspec/config.yaml names scripts/roles/<role>.md inside the context: block" \
   bash -c "[ -n '${cfg_hit:-}' ] && [ -n '${ctx_line:-}' ] && [ -n '${next_key_line:-}' ] && [ '$cfg_hit' -gt '$ctx_line' ] && [ '$cfg_hit' -lt '$next_key_line' ]"
 
-check "SKILL.md names at least one prompt: line" bash -c "[ \$(grep -c 'prompt:' SKILL.md) -ge 1 ]"
+check "SKILL.md names at least one prompt: line" bash -c "[ \$(grep -c 'prompt:' $SKILL/SKILL.md) -ge 1 ]"
 
 echo
 [ "$fails" -eq 0 ] && echo "all tests passed" || { echo "$fails test(s) failed"; exit 1; }

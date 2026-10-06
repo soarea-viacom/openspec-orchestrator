@@ -7,8 +7,9 @@ of [OpenSpec](https://github.com/Fission-AI/OpenSpec): draft a delta spec, criti
 implement it, gate and verify it, archive it into the living spec. Execution is
 autonomous end to end, with two defined human checkpoints.
 
-This repository is the engine (`SKILL.md`, `AUTONOMOUS-ORCHESTRATION.md`, `scripts/`), not
-a target project. It is applied, by the skill, to whichever project it is invoked on.
+This repository is the engine, not a target project. Everything a consumer installs lives
+under `skills/openspec-orchestrator/`; the rest of the repo is tests, design records and
+this repository's own OpenSpec scaffold. It is applied, by the skill, to whichever project it is invoked on.
 
 ## Overview
 
@@ -24,7 +25,7 @@ a target project. It is applied, by the skill, to whichever project it is invoke
   - a project with neither is asked once, at first invocation.
 
   Local mode takes priority over an existing external store for the same project. See
-  [SKILL.md § Step 1](SKILL.md).
+  [SKILL.md § Step 1](skills/openspec-orchestrator/SKILL.md).
 - **Execution.** Autonomous: Propose → Apply → Check → Verify → Archive → Merge, end to
   end, with at most two mandatory human checkpoints per change (Gate 1, Gate 2 — Gate 0's
   acceptance is required too but is part of every round, not a conditional checkpoint),
@@ -86,12 +87,15 @@ flowchart TD
 
 | Path | Contents |
 |---|---|
-| [`SKILL.md`](SKILL.md) | Skill definition: preflight, root resolution, the 3-phase workflow, guardrails. |
-| [`AUTONOMOUS-ORCHESTRATION.md`](AUTONOMOUS-ORCHESTRATION.md) | Operational rules for the autonomous run: phases, slots, units, checker loops, model/effort routing, bug triage, initiatives. |
-| [`scripts/run-change`](scripts/run-change) | Mechanical engine: slots, workspaces/worktrees, gates, merge lane, state and session-log bookkeeping. |
-| [`scripts/lib.sh`](scripts/lib.sh) | Shared helpers: store/registry lookups, state-file format, model routing, project-skill stage mapping, local-vs-external guard. |
-| [`tests/run.sh`](tests/run.sh) | Black-box tests for `run-change`, via its CLI only. |
-| [`CONTEXT.md`](CONTEXT.md) | Domain glossary: Store, Change, Worker, Advisor, Blackboard, Seam list, etc. |
+| [`skills/openspec-orchestrator/`](skills/openspec-orchestrator/) | The installable skill: everything below this row ships to a consumer as one directory. |
+| [`SKILL.md`](skills/openspec-orchestrator/SKILL.md) | Skill definition: preflight, root resolution, the 3-phase workflow, guardrails. |
+| [`AUTONOMOUS-ORCHESTRATION.md`](skills/openspec-orchestrator/AUTONOMOUS-ORCHESTRATION.md) | Operational rules for the autonomous run: phases, slots, units, checker loops, model/effort routing, bug triage, initiatives. |
+| [`scripts/run-change`](skills/openspec-orchestrator/scripts/run-change) | Mechanical engine: slots, workspaces/worktrees, gates, merge lane, state and session-log bookkeeping. |
+| [`scripts/lib.sh`](skills/openspec-orchestrator/scripts/lib.sh) | Shared helpers: store/registry lookups, state-file format, model routing, project-skill stage mapping, local-vs-external guard. |
+| [`scripts/roles/`](skills/openspec-orchestrator/scripts/roles/) | Literal dispatch text per engine role (proposer, critic, worker, unit-critic, verifier). |
+| [`CONTEXT.md`](skills/openspec-orchestrator/CONTEXT.md) | Domain glossary: Store, Change, Worker, Advisor, Blackboard, Seam list, etc. |
+| [`releases.json`](skills/openspec-orchestrator/releases.json) | Version history read by Atlas; written by `atlas bump`, never by hand. |
+| [`tests/run.sh`](tests/run.sh) | Black-box tests for `run-change`, via its CLI only. Not installed. |
 | [`docs/proposals/`](docs/proposals/) | Design records for engine extensions. Adopted proposals reference where they landed; others are marked as sketches. |
 | `openspec/`, `.openspec-store/` | This repository's own OpenSpec scaffold, used to develop the skill under its own discipline. Not required by a target project. |
 
@@ -107,17 +111,17 @@ flowchart TD
 
 ### Install the skill
 
-`SKILL.md` and `AUTONOMOUS-ORCHESTRATION.md` invoke `scripts/run-change` as a path
-relative to the skill's own directory; `scripts/lib.sh` locates its sibling files the same
-way. The full repository — at minimum `SKILL.md`, `AUTONOMOUS-ORCHESTRATION.md`, and
-`scripts/` — must be present in that layout wherever Claude Code loads skills from.
-Symlinking the repository keeps it current with `git pull`:
+The skill is the directory `skills/openspec-orchestrator/`. `SKILL.md` and
+`AUTONOMOUS-ORCHESTRATION.md` invoke `scripts/run-change` relative to that directory and
+`scripts/lib.sh` locates its siblings the same way, so the directory must land whole
+wherever Claude Code loads skills from. Without Atlas:
 
 ```bash
-ln -s "$(pwd)" ~/.claude/skills/openspec-orchestrator
+cp -R skills/openspec-orchestrator ~/.claude/skills/openspec-orchestrator
 ```
 
-A plain copy works as well; it requires re-copying after updates.
+A symlink to that directory works for development and tracks `git pull`, but hides the
+install path a consumer gets; prefer the copy when testing a release.
 
 ### Install via Atlas
 
@@ -176,7 +180,7 @@ For read-only discovery with no artifacts written:
 ### Execution sequence
 
 1. **Routing** — resolves local mode, external-store mode, or prompts once. Recomputed
-   from repo state on every invocation; not cached. See [SKILL.md § Step 1](SKILL.md).
+   from repo state on every invocation; not cached. See [SKILL.md § Step 1](skills/openspec-orchestrator/SKILL.md).
 2. **Trunk preflight** — before any change opens: `gate run --mode full --trunk` runs
    `gate_full` against the trunk ref in a temporary worktree. Red, or `gate_full`
    unconfigured, stops here; no change is opened and no state is written.
@@ -248,7 +252,7 @@ accept a list and stack on top of the built-in checker. See
 bash tests/run.sh
 ```
 
-Exercises `scripts/run-change` against a temporary registry and git origin/clone: slots,
+Exercises `skills/openspec-orchestrator/scripts/run-change` against a temporary registry and git origin/clone: slots,
 workspaces, gates, merge lane, the local-vs-external guard, `stage-skills get`, and state
 transitions. All three scripts must also pass `bash -n`.
 
@@ -261,4 +265,4 @@ transitions. All three scripts must also pass `bash -n`.
   bypassed store is left untouched.
 - Every OpenSpec CLI call carries `--store <slug>` once a root is resolved.
 
-Full list: [SKILL.md § Guardrails](SKILL.md).
+Full list: [SKILL.md § Guardrails](skills/openspec-orchestrator/SKILL.md).

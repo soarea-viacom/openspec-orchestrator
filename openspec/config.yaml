@@ -9,10 +9,12 @@ schema: spec-driven
 #     We use conventional commits
 #     Domain: e-commerce platform
 context: |
-  This repo is the openspec-orchestrator engine itself, not a target project:
-  bash scripts (scripts/run-change, scripts/lib.sh) plus the two docs the
-  skill loads (SKILL.md, AUTONOMOUS-ORCHESTRATION.md). CONTEXT.md holds the
-  domain vocabulary. Tests are tests/run.sh (check/check_out/check_line
+  This repo is the openspec-orchestrator engine itself, not a target project.
+  Everything a consumer installs lives under skills/openspec-orchestrator/:
+  SKILL.md, AUTONOMOUS-ORCHESTRATION.md, CONTEXT.md, scripts/ (run-change,
+  lib.sh, roles/) and releases.json — Atlas copies that directory whole, so
+  nothing the engine needs at run time may live outside it. tests/, openspec/,
+  docs/ and README.md stay at the repo root and are not installed. Tests are tests/run.sh (check/check_out/check_line
   helpers, a no-caller function scan as the dead-code pass). Every change to
   SKILL.md or AUTONOMOUS-ORCHESTRATION.md bumps releases.json via
   `atlas bump skill openspec-orchestrator --minor -m "..."`, never by hand;
@@ -21,7 +23,7 @@ context: |
   example block and this context in the same change; Verify warns otherwise.
   Project notes per role live in openspec/roles/<role>.md (proposer, critic,
   worker, unit-critic, verifier) and are appended to that role's dispatch.
-  The engine's own prompts live at scripts/roles/<role>.md and print before
+  The engine's own prompts live at skills/openspec-orchestrator/scripts/roles/<role>.md and print before
   the store's overlay; inside those prompts anchor repetition is kept, not
   deduplicated, unlike terse human-facing prose.
 
@@ -70,5 +72,5 @@ context: |
 orchestration:
   concurrency: 1
   unit_concurrency: 3
-  gate_quick: "bash -n scripts/run-change && bash -n scripts/lib.sh"
+  gate_quick: "bash -n skills/openspec-orchestrator/scripts/run-change && bash -n skills/openspec-orchestrator/scripts/lib.sh"
   gate_full: "./tests/run.sh"

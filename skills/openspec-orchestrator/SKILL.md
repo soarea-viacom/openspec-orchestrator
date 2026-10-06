@@ -93,7 +93,7 @@ that stage (`orchestration.stage_skills`). A mapped `plan` skill drafts instead 
 default deep-tier model; a mapped `critic`/`test` skill runs *in addition to* the default
 checker, never instead of it. See **Project-skill stage mapping** in
 [AUTONOMOUS-ORCHESTRATION.md](AUTONOMOUS-ORCHESTRATION.md) for the exact rule and
-[`docs/proposals/skill-stage-mapping.md`](docs/proposals/skill-stage-mapping.md) for the
+[`docs/proposals/skill-stage-mapping.md`](https://github.com/soarea-viacom/openspec-orchestrator/blob/main/docs/proposals/skill-stage-mapping.md) for the
 design rationale. Unset (the common case) → the three phases run exactly as described
 above, no project skill involved.
 

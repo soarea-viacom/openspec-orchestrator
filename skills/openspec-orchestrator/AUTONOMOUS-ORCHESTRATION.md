@@ -998,7 +998,7 @@ Before dispatching Propose, the critique step, or Verify at the tier/model above
 whether the project has named one of its own skills for that stage:
 `scripts/run-change stage-skills get --store <slug> --stage plan|critic|test`. Output is
 one skill name per line, empty if the project set nothing — see
-[`docs/proposals/skill-stage-mapping.md`](docs/proposals/skill-stage-mapping.md) for the
+[`docs/proposals/skill-stage-mapping.md`](https://github.com/soarea-viacom/openspec-orchestrator/blob/main/docs/proposals/skill-stage-mapping.md) for the
 full design and why the mapping lives only in the resolved root's `openspec/config.yaml`
 (`orchestration.stage_skills`), never in a skill's own frontmatter, and never behind any
 other switch:
