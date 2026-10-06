@@ -492,15 +492,17 @@ cmd_unit_iterate() {
   local shotdir; shotdir="$(unit_state_dir "$STORE" "$NAME")/$UNIT"
   mkdir -p "$shotdir"
   local shot="$shotdir/screenshot-$n.png"
-  local status_run=0
-  ( cd "$unit_wt" && export UNIT_SCREENSHOT="$shot" UNIT_NAME="$UNIT" && eval "$gcmd" ) || status_run=$?
-  local result=green
-  [ "$status_run" -eq 0 ] || result=red
   local f="$(state_root "$STORE")/$NAME.yaml"
   local ui_units_v; ui_units_v="$(state_field "$f" ui_units)"
-  case ",$ui_units_v," in
-    *",$UNIT,"*) [ -f "$shot" ] || result=red ;;
-  esac
+  local is_ui=0; case ",$ui_units_v," in *",$UNIT,"*) is_ui=1 ;; esac
+  # gate_ui (browser tests) runs only for a UI unit, after gate_quick, so
+  # non-UI units never pay for Playwright on every iteration.
+  local ucmd=""; [ "$is_ui" = 1 ] && ucmd="$(gate_command "$STORE" ui)"
+  local status_run=0
+  ( cd "$unit_wt" && export UNIT_SCREENSHOT="$shot" UNIT_NAME="$UNIT" && eval "$gcmd" && { [ -z "$ucmd" ] || eval "$ucmd"; } ) || status_run=$?
+  local result=green
+  [ "$status_run" -eq 0 ] || result=red
+  [ "$is_ui" = 1 ] && { [ -f "$shot" ] || result=red; }
   local tier; tier="$(unit_logged_tier "$STORE" "$NAME" "$UNIT")"
   local model; model="$(model_for_tier "$STORE" "$tier")"
   session_append "$(session_log_path "$STORE" "$NAME")" \

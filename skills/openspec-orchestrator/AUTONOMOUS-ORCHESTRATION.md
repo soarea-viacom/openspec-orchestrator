@@ -45,7 +45,7 @@ A "change" always has two locations, never one:
   plain project paths for code) is unchanged.
 
 Orchestration config (`orchestration.concurrency`, `gate_quick`,
-`gate_full`) lives ONLY in the resolved store's `openspec/config.yaml`.
+`gate_ui`, `gate_full`) lives ONLY in the resolved store's `openspec/config.yaml`.
 `scripts/run-change` refuses a project that has its own `openspec/` folder
 **only when** the store it's being pointed at is a genuinely different
 external root — that combination means the wrong store was resolved for a
@@ -346,7 +346,12 @@ append`, never edited after the fact.
    false` (**Single-worker baseline** below), `split` instead runs `units
    single [--ui]` at tier `none`: one unit `all` holding every seam file
    and every task id. A change too small to have named more than one seam
-   still goes through `split` and gets one unit.
+   still goes through `split` and gets one unit. Prefer a **flat** split:
+   one scaffold or contracts unit that everything depends on, then leaves
+   that depend only on it. A chain (A → B → C → D) serialises the wave,
+   and each link's defects cost every unit after it a rerun; a dependency
+   edge is for a real compile-time or test-time need, not for "it feels
+   earlier".
 
    **Spawn.** The scheduler, `units next`, lists ready units (no dep
    outstanding, in `units` field order) up to the free capacity
@@ -357,9 +362,10 @@ append`, never edited after the fact.
    `<ws>/<name>.<u>`, refusing an unknown unit, a dep not yet `merged`, or
    a dirty change worktree) and dispatches one Agent per unit into that
    worktree at the tier `unit_tiers` names for it — `deep` for a
-   **foundation unit** (one some other unit depends on: it serialises the
-   wave, and a defect in it costs every dependent a rerun), `standard` for
-   a leaf; `unit create` records that tier on the unit's state file — see
+   **foundation unit** (two or more units depend on it directly: it
+   serialises the wave, and a defect in it costs every dependent a rerun),
+   `standard` for a leaf or a link with a single dependent; `unit create`
+   records that tier on the unit's state file — see
    **Unit workers** below for the dispatch contract and the check-first
    loop it runs (`unit iterate`, capped at 5).
    Units with no dependency between them run concurrently, each in its own
@@ -568,8 +574,9 @@ never another unit's transcript.
   the unit branch HEAD as `checks_commit` and refuses while HEAD still
   equals `base` (nothing committed yet). `unit iterate` refuses until
   `checks_commit` is set. The checks must be part of what `gate_quick`
-  runs, so the critic's `git diff base..checks_commit` is read against the
-  same thing the loop below actually checks.
+  runs — or `gate_ui` for a UI unit's Playwright script — so the critic's
+  `git diff base..checks_commit` is read against the same thing the loop
+  below actually checks.
 - **UI layout invariants.** A Playwright script for a UI unit launches the
   page at 1280×800 and writes a full-page screenshot to `$UNIT_SCREENSHOT`
   only when `$UNIT_NAME` equals the unit that owns that test (both
@@ -589,8 +596,14 @@ never another unit's transcript.
   with the human's approval. The engine never depends on Playwright.
 - **The loop.** Implement, then `unit iterate --unit <u>` — the engine, not
   the worker, runs `gate_quick` in the unit worktree with
-  `UNIT_SCREENSHOT`/`UNIT_NAME` exported and derives green/red from its
-  exit code (green for a UI unit also requires the PNG to exist). Fix on
+  `UNIT_SCREENSHOT`/`UNIT_NAME` exported, then — for a unit in `ui_units`
+  only — `orchestration.gate_ui` (the Playwright run) in the same shell,
+  and derives green/red from the combined exit code (green for a UI unit
+  also requires the PNG to exist). `gate_quick` stays under ~30 s: type
+  check, unit tests, nothing that launches a browser; a Playwright run in
+  `gate_quick` is paid by every non-UI unit on every iteration (measured:
+  28 s × 17 iterations on one change). Put it in `gate_ui`; a store with
+  no `gate_ui` runs `gate_quick` alone for UI units as before. Fix on
   red, iterate again; at most 5 iterations (`UNIT_ITER_CAP`) — a 6th call
   is refused and the unit is marked `failed`. The worker never asserts its
   own result; the recorded `checks` value always comes from a command the
@@ -933,7 +946,7 @@ Pick a tier per task, not per session:
 - `deep`: Propose (drafting the delta spec and seam list, every
   `full`-lifecycle change, not just initiative decomposition — `light`
   drafts at `standard`), `split` under `full` parallel mode (the unit
-  generator), a foundation unit worker (one other units depend on), design
+  generator), a foundation unit worker (two or more units depend on it), design
   docs, anything touching an invariant, fix round 3, any fix round after
   `spec_amend accepted`, Verify of a `standard` implementer, and the unit
   critic over a `standard` leaf worker.

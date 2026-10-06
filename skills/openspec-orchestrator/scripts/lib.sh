@@ -843,17 +843,20 @@ checker_pick() {
   return 1
 }
 
-# unit_tier <store-slug> <name> <unit> -> deep for a foundation unit (one
-# some other unit depends on: its defects cost every dependent a rerun and
-# it serialises the whole wave), standard for a leaf.
+# unit_tier <store-slug> <name> <unit> -> deep for a foundation unit — one
+# with two or more direct dependents: its defects cost every dependent a
+# rerun and it serialises the wave. A link in a chain (one dependent) is
+# standard: measured, a chained split made 7 of 8 units "foundation" and
+# routed each to deep plus a max critic for no fan-out at all.
+FOUNDATION_MIN_DEPENDENTS=2
 unit_tier() {
   local deps_v; deps_v="$(state_field "$(state_root "$1")/$2.yaml" unit_deps)"
-  local k
+  local k n=0
   for k in $(map_keys "$deps_v"); do
     [ "$k" = "$3" ] && continue
-    case ",$(map_get "$deps_v" "$k")," in *",$3,"*) echo deep; return 0 ;; esac
+    case ",$(map_get "$deps_v" "$k")," in *",$3,"*) n=$((n + 1)) ;; esac
   done
-  echo standard
+  [ "$n" -ge "$FOUNDATION_MIN_DEPENDENTS" ] && echo deep || echo standard
 }
 
 # unit_logged_tier <store-slug> <name> <unit> -> the tier recorded on the

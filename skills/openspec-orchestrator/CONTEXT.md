@@ -64,8 +64,8 @@
 - **Unit critique**: the critic dispatched over `units ready-for-review`
   (every `green` unit with no `critique` recorded yet), one tier above
   that unit's own worker — `deep` over a `standard` leaf, `max` over a
-  `deep` foundation unit (one other units depend on; `unit create` records
-  the tier on the unit's state file). Its
+  `deep` foundation unit (two or more units depend on it directly; `unit
+  create` records the tier on the unit's state file). Its
   report, `<name>.units/<unit>.critique.md`, must quote the unit's
   recorded `screenshot` path verbatim for a unit in `ui_units`; `unit set
   critique` refuses otherwise. `blocking` sends the unit back to
@@ -164,10 +164,11 @@
   before `archive` is ever returned) and `gate2-manual` (the manual-task
   block at `verified` — see **Manual tasks** above).
 - **Gate**: the project's quick or full check command
-  (`orchestration.gate_quick` / `gate_full` in the *store's*
+  (`orchestration.gate_quick` / `gate_ui` / `gate_full` in the *store's*
   `openspec/config.yaml` — single rule: a target project must not contain
   an `openspec/` folder; the engine refuses one that does). `gate_quick`
-  should stay under ~30 s — it runs once per dispatch wave; anything
+  should stay under ~30 s — it runs on every unit iteration; `gate_ui`
+  (browser tests) runs after it for units in `ui_units` only; anything
   slower belongs in `gate_full`, which runs once per Check. The full gate
   includes the project's dead-code pass (`knip`, `vulture`, or
   equivalent); for this engine that is the no-caller function scan in

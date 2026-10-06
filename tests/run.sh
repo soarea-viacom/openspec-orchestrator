@@ -1011,6 +1011,38 @@ nlines_after="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -
 check "6th iterate appends no log entry" test "$nlines_before" = "$nlines_after"
 check_out "unit status is failed past the cap" "status: failed" $RC unit get --store storeu1 --name feat-iter --unit a
 
+# gate_ui: runs after gate_quick for UI units only
+mkdir -p "$TMP/storeui/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  storeui:
+    local_path: $TMP/storeui
+EOF
+cat > "$TMP/storeui/openspec/config.yaml" <<'EOF'
+orchestration:
+  unit_concurrency: 2
+  gate_quick: 'test -f OK'
+  gate_ui: 'echo UI-RAN >> "$UNIT_SCREENSHOT.log" && touch "$UNIT_SCREENSHOT"'
+  gate_full: "echo FULL-OK"
+EOF
+UPROJECTUI="$TMP/uprojectui"
+git init -q -b main "$UPROJECTUI"
+echo one > "$UPROJECTUI/a.js"; echo two > "$UPROJECTUI/b.js"
+git -C "$UPROJECTUI" add -A && git -C "$UPROJECTUI" commit -qm init
+$RC state init --store storeui --name feat-ui
+$RC state set --store storeui --name feat-ui seams "s=a.js,b.js" units "a=a.js;b=b.js" unit_deps "" ui_units "a"
+$RC workspace create --store storeui --project "$UPROJECTUI" --name feat-ui >/dev/null 2>&1
+uwa="$($RC unit create --store storeui --project "$UPROJECTUI" --name feat-ui --unit a)"
+uwb="$($RC unit create --store storeui --project "$UPROJECTUI" --name feat-ui --unit b)"
+for w in "$uwa" "$uwb"; do echo check > "$w/t.js"; git -C "$w" add -A && git -C "$w" commit -qm checks; touch "$w/OK"; done
+$RC unit checks-done --store storeui --project "$UPROJECTUI" --name feat-ui --unit a
+$RC unit checks-done --store storeui --project "$UPROJECTUI" --name feat-ui --unit b
+check "UI unit: gate_quick then gate_ui -> green" $RC unit iterate --store storeui --project "$UPROJECTUI" --name feat-ui --unit a
+check "UI unit: gate_ui ran" test -f "$TMP/storeui/.orchestration/state/feat-ui.units/a/screenshot-1.png.log"
+check "non-UI unit: green from gate_quick alone" $RC unit iterate --store storeui --project "$UPROJECTUI" --name feat-ui --unit b
+check "non-UI unit: gate_ui did not run" bash -c "! ls '$TMP/storeui/.orchestration/state/feat-ui.units/b/' | grep -q log"
+rm -f "$uwa/OK"
+check "UI unit: red gate_quick is red even when gate_ui would pass" bash -c "! $RC unit iterate --store storeui --project '$UPROJECTUI' --name feat-ui --unit a >/dev/null 2>&1"
+
 # a non-UI unit red every time ends failed at the cap too
 UPROJECT1B="$TMP/uproject1b"
 git init -q -b main "$UPROJECT1B"
@@ -1419,9 +1451,13 @@ check_out "applying: unit-spawn names the worker overlay" "overlay: $STORE/opens
 check_out "applying: unit-spawn lists ready units up to capacity (2)" "units: a b" $RC next --store teststore --name feat-appl-spawn
 check_out "applying: unit-spawn running line is empty" "running: " $RC next --store teststore --name feat-appl-spawn
 
+appl_init feat-appl-chain
+$RC state set --store teststore --name feat-appl-chain unit_deps "b=a;c=b"
+check_out "applying: a chain link with one dependent spawns at standard" "unit_tiers: a=standard" $RC next --store teststore --name feat-appl-chain
+
 appl_init feat-appl-found
 $RC state set --store teststore --name feat-appl-found unit_deps "b=a;c=a"
-check_out "applying: a unit others depend on spawns at deep" "tier: deep" $RC next --store teststore --name feat-appl-found
+check_out "applying: a unit two others depend on spawns at deep" "tier: deep" $RC next --store teststore --name feat-appl-found
 check_out "applying: unit_tiers marks the foundation unit deep" "unit_tiers: a=deep" $RC next --store teststore --name feat-appl-found
 check_out "applying: only the foundation unit is ready" "units: a" $RC next --store teststore --name feat-appl-found
 udir="$(appl_udir feat-appl-found)"; mkdir -p "$udir"

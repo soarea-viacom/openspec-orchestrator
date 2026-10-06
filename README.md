@@ -64,7 +64,7 @@ flowchart TD
         P1c -- blocking, rounds left --> P1
         P1c -- clean/warnings --> P2[Apply: commit change worktree,<br/>split into units]
         P1c -- not converging / out of rounds --> GATE1[["Gate 1 (human)<br/>clarify the request"]]
-        P2 --> P2U[Units: parallel worktree + branch each,<br/>deep for foundation units, standard for leaves,<br/>check-first loop capped at 5 iterations]
+        P2 --> P2U[Units: parallel worktree + branch each,<br/>deep when two or more units depend on it, else standard,<br/>check-first loop capped at 5 iterations]
         P2U --> P2C{Unit green?<br/>critic one tier above the unit's worker, screenshots for UI units}
         P2C -- blocking, cap left --> P2U
         P2C -- reviewed --> P2M[Merge unit onto change branch<br/>in dependency order]
@@ -154,8 +154,8 @@ depends on but cannot fix for you:
   Parallelize it once shared-state tests are confirmed safe, pinning the ones that are not
   to serial rather than dropping parallelism everywhere.
 - **Quick gate.** Have a cheap lint / type-check / last-failed-tests command available for
-  `gate_quick` — keep it under ~30 s; anything slower (the full suite, the dead-code pass)
-  belongs in `gate_full` (see Configuration).
+  `gate_quick` — keep it under ~30 s; browser tests go in `gate_ui`, run for UI units only;
+  anything slower (the full suite, the dead-code pass) belongs in `gate_full` (see Configuration).
 - **Workspace cost.** Each change gets its own git worktree under the store's
   `.orchestration/workspaces/` (the engine adds the ignore rule itself). Confirm
   dependencies can be installed or linked into a fresh worktree cheaply, and that
@@ -232,6 +232,7 @@ orchestration:
   unit_concurrency: 3                # max concurrent units within one change (default 3)
   parallel: true                     # false runs each change as one unit (single-worker baseline)
   gate_quick: "npm run lint && npm run typecheck"
+  gate_ui: "npx playwright test"     # UI units only, after gate_quick
   gate_full: "npm test && npx knip"  # must include a dead-code pass
   model_mechanical: claude-haiku-4-5-20251001   # optional overrides
   model_standard: claude-sonnet-5

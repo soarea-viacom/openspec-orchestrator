@@ -63,6 +63,7 @@ context: |
 #     unit_concurrency: 3     # units in flight per change (default 3)
 #     parallel: true          # false = one unit per change
 #     gate_quick: "npm run lint && npm run typecheck"
+#     gate_ui: "npx playwright test"   # UI units only, after gate_quick
 #     gate_full: "npm test && npx knip"
 #     model_mechanical / model_standard / model_deep / model_max: per-tier overrides
 #     checker_effort: high    # lets a checker share the generator's model
