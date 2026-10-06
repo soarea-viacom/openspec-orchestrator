@@ -186,7 +186,26 @@ append`, never edited after the fact.
    **Guardrails** line: what this change must not introduce (a new
    dependency, a new abstraction, a changed public signature, a widened
    seam), named concretely, so the critic and Verify have a negative to
-   grade against and not only requirements to tick. Before drafting prose, sketch the
+   grade against and not only requirements to tick.
+
+   **Implied baseline.** A request carries more than it states. For
+   anything simulated or depicted: physical law and nature — solid objects
+   collide, gravity acts, a world has edges, light comes from a sky, a car
+   has four wheels. For the domain: its conventions — an HTTP API answers
+   404 for a missing resource, a form validates input. For the code:
+   programming best practice — errors are handled, inputs are validated,
+   nothing secret is committed. The request's **register** picks the
+   baseline: "realistic", or silence, means the natural one; "fantastic",
+   "science fiction", "fairy-tale" and their kin replace natural law with
+   the genre's rules, and only then. The baseline is part of the request.
+   The proposer writes it into the requirements as if the human had typed
+   it; grill never asks the human to confirm it (nobody asks whether the
+   car needs six wheels); the Guardrails line never excludes it; the critic
+   treats a baseline behaviour the draft omits as a `blocking` fidelity
+   finding; Verify grades it like any requirement. Measured: a run whose
+   brief said "static buildings" and "realistic" shipped a car that drove
+   through the buildings, and every checker passed it because no artifact
+   had named collision. Before drafting prose, sketch the
    **seams** the change touches:
    existing seams preferred over new ones, fewest possible (one is ideal),
    each seam named with the files/modules behind it. Write this seam list
@@ -216,8 +235,11 @@ append`, never edited after the fact.
    **concurrently** with this checker, reads the same inputs, and reports
    alongside it — not instead of it; the step waits for all of them and
    merges the reports.
-   - **Fidelity**: every part of the request is covered, nothing beyond it
-     is added.
+   - **Fidelity**: every part of the request is covered — including its
+     **implied baseline** (above): a natural-law, domain, or best-practice
+     behaviour the request's register implies and the draft omits is
+     `blocking`, and "ask the human to confirm it" is never the remedy —
+     and nothing beyond the request and its baseline is added.
    - **Seams are real**: each named file exists, is where that behavior
      actually lives, and the list is complete — a missing file here breaks
      the disjoint-files check silently.

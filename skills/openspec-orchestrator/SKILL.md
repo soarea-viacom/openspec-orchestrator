@@ -64,6 +64,7 @@ Every OpenSpec CLI call below gets `--store <slug>` appended — e.g. `openspec 
   - Read active code boundaries and structural modules.
   - Draft explicit architectural intent into a temporary delta spec.
   - Predict potential side effects or breaking changes in downstream dependencies.
+  - **Assume the implied baseline, never ask it:** physical law and nature for anything simulated (solid objects, gravity, world edges), the domain's conventions, programming best practice. "Realistic" or silence means the natural baseline; a genre word ("fantastic", "SF", "fairy-tale") swaps in that genre's rules. The proposer writes the baseline into the requirements; the critic blocks a draft that omits part of it; no interview round spends a question on it.
   - **Classify first, on four pillars:** scope, blast radius, novelty, dependency impact — recorded in state (`pillars`) by a `classify` step before anything is drafted, repeated one line each in the proposal, plus a **Guardrails** line naming what the change must not introduce. The critic checks the readings; the proposer never lowers its own scrutiny.
   - **Grill unless trivial:** any pillar above its lowest reading sends the change through grill mode's in-change entry (below) before Propose — the human settles what and how, then autonomy takes over. Only a change trivial on every pillar skips it.
   - **Fast path for simple, non-breaking fixes:** when all four pillars read lowest (one file or seam, nothing breaks outside it, a known pattern, no new dependency), skip the extended exploration above and draft the smallest delta spec that captures the fix, then send it straight to critique. Gate 0 still fires unchanged — the human still sees and accepts the short resume before Apply starts. This path only shortens how much drafting happens before critique, never the gate itself. If, once the code is examined, the fix turns out to touch a public API, change behavior other code depends on, require a migration, or otherwise ripple outside the local fix, abandon the fast path and run full Phase 1 exploration instead.
@@ -172,7 +173,11 @@ Sequence:
    boundaries, existing specs and active changes; present two or three approaches
    with trade-offs, risks and a recommendation. This round
    writes nothing. The human may stop here — with no term or decision
-   resolved, nothing is written.
+   resolved, nothing is written. **Never ask the obvious**: every question
+   in this mode is a genuine fork between defensible options. The implied
+   baseline (AUTONOMOUS-ORCHESTRATION.md Phases step 3) is assumed, and a
+   question whose recommended answer is "yes, of course" is dropped before
+   it is shown.
 4. **Interview.** The orchestrator calls the Skill tool for `grilling` and
    for `domain-modeling` itself, telling domain-modeling the Project
    glossary is `<root>/openspec/CONTEXT.md` and ADRs go in

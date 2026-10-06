@@ -185,6 +185,9 @@ proposer:seams "<seam>=<file>,<file>;<seam>=<file>"
 proposer:openspec/CONTEXT.md
 proposer:openspec/adr/
 proposer:never edit
+proposer:implied baseline
+critic:implied baseline
+verifier:implied baseline
 critic:never the generator'"'"'s transcript
 critic:openspec/CONTEXT.md
 critic:openspec/adr/
@@ -1636,6 +1639,9 @@ check "SKILL.md description: line has exactly one ': '" test "$colon_count" = 1
 check "SKILL.md description: line has no ' #'" test "$hash_count" = 0
 
 check "CONTEXT.md defines Project glossary" grep -qF -- '**Project glossary**' $SKILL/CONTEXT.md
+check "CONTEXT.md defines Implied baseline" grep -qF -- '**Implied baseline**' $SKILL/CONTEXT.md
+check "SKILL.md grill section never asks the obvious" grep -qF -- 'Never ask the obvious' $SKILL/SKILL.md
+check "AUTONOMOUS-ORCHESTRATION.md fidelity standard names the implied baseline" bash -c "grep -A4 -- '- \*\*Fidelity\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md | grep -q 'implied baseline'"
 check "CONTEXT.md defines Grill mode" grep -qF -- '**Grill mode**' $SKILL/CONTEXT.md
 cic_start="$({ grep -n -- '\*\*Checker input contract\*\*' $SKILL/CONTEXT.md || true; } | head -1 | cut -d: -f1)"
 cic_tmp="$TMP/checker_input_contract.txt"

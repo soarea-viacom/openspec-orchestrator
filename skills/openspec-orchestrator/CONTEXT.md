@@ -226,7 +226,15 @@
 - **Guardrails**: the proposal line naming what the change must not
   introduce (dependency, abstraction, public signature, widened seam).
   The critic checks it names real risks for the seam; Verify grades the
-  diff against it as against any requirement.
+  diff against it as against any requirement. It never excludes the
+  implied baseline.
+- **Implied baseline**: what a request means without saying — physical
+  law and nature for anything simulated, the domain's conventions,
+  programming best practice — selected by the request's **register**:
+  "realistic" or silence → natural law; a genre word ("fantastic", "SF",
+  "fairy-tale") → that genre's rules. Part of the request: the proposer
+  writes it into the requirements, grill never asks it, the critic blocks
+  a draft missing part of it, Verify grades it like any requirement.
 - **Project glossary**: `<root>/openspec/CONTEXT.md`, plus ADRs in
   `<root>/openspec/adr/` — the canonical terms and decisions a grill-mode
   interview records for one project. Distinct from this engine's own
