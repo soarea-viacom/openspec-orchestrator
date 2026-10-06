@@ -770,6 +770,8 @@ gate_tree: ""
 last_verify_result: ""
 prev_verify_result: ""
 lifecycle: full
+pillars: ""
+grill: ""
 units: ""
 unit_deps: ""
 unit_tasks: ""

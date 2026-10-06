@@ -139,26 +139,50 @@ append`, never edited after the fact.
    Under `lifecycle: light` (see below), Propose and any `revise` round run
    at `standard` instead — the critic still resolves one tier above, to
    `deep`, via the generator/checker split.
-   Draft the delta spec via the normal `openspec-orchestrator` propose phase, scoped
-   to the workspace, `--store <slug>`. First **classify** the request on
-   four pillars, one line each in the proposal: **scope** (one file, one
-   seam, or several seams), **blast radius** (what else breaks if this is
-   wrong: nothing outside the seam, callers inside the project, or a
-   public API, schema, or contract another caller relies on), **novelty**
-   (a known pattern in this codebase, or new logic), and **dependency
-   impact** (no new dependency, a dev-only one, or a runtime one, external
-   service, or shared state). The classification decides the shape, and
-   nothing else does: all four at their lowest reading is a **fast-path
-   fix** — skip the extended exploration otherwise done here and draft the
-   smallest delta spec that captures it, and Gate 0 offers `light`; blast
-   radius or dependency impact beyond the project, or parts that would
-   merge independently, is an **initiative** (**Initiatives** below), not a
-   change; everything else is an ordinary `full` change. The tier stays
-   `deep` either way, only how much is explored before drafting shrinks.
-   Reclassify, and say so in the proposal, if the code turns out to read
-   higher on any pillar than the request suggested. The proposer states the
-   classification; it is the critic, below, who accepts or rejects it — a
-   proposer never lowers its own scrutiny. The proposal also carries a
+   Propose is three `next` steps, not one: `classify`, then `grill`
+   unless the change is trivial, then `propose`.
+
+   **Classify** (`standard`): read the request and the code, then record
+   the four pillar readings in state — `state set ... pillars
+   "scope=<file|seam|seams>;blast=<none|project|public>;novelty=<known|new>;deps=<none|dev|runtime>"`.
+   **Scope**: one file, one seam, or several seams. **Blast radius**: what
+   else breaks if this is wrong — nothing outside the seam, callers inside
+   the project, or a public API, schema, or contract another caller relies
+   on. **Novelty**: a known pattern in this codebase, or new logic.
+   **Dependency impact**: no new dependency, a dev-only one, or a runtime
+   one, external service, or shared state. Values outside those lists are
+   refused by `next`. Read them for the code as it is, not for the request's
+   tone: the critic grades the readings later and a pillar read low to
+   earn the fast path is `blocking`.
+
+   **Grill** (tier `none`, the orchestrator itself): `next` returns it when
+   any pillar reads above `scope=seam`, `blast=none`, `novelty=known`,
+   `deps=none` and `grill` is not yet `done`. Run grill mode's in-change
+   entry (SKILL.md **Grill mode**): the analysis round, then `grilling`
+   and `domain-modeling` writing the Project glossary and ADRs under the
+   root's `openspec/`, then `state set ... grill done`. This is the one
+   interview inside a change, and it is where the human settles *what*
+   and *how*; "make every decision yourself" governs everything after it,
+   never instead of it. A greenfield folder with new logic or a public
+   contract is the case this exists for: expectations get set before a
+   proposer invents them. The human may decline the interview with
+   `state set ... grill skipped:human`, which `next` treats as done; the
+   engine never skips it on its own for a non-trivial change.
+
+   **Propose** (`deep`): draft. The classification decides the shape, and
+   nothing else does: trivial on every pillar is a **fast-path fix** —
+   grill skipped, the extended exploration otherwise done here skipped,
+   the smallest delta spec that captures it, and Gate 0 offers `light`;
+   blast radius or dependency impact beyond the project, or parts that
+   would merge independently, is an **initiative** (**Initiatives**
+   below), not a change; everything else is an ordinary `full` change.
+   The proposal repeats the four readings, one line each, and cites the
+   glossary terms and ADRs grill wrote. Reclassify — update `pillars` and
+   say so in the proposal — if the code turns out to read higher on any
+   pillar than classify did; a reclassification out of trivial sends the
+   change back through `grill`. The proposer states the classification; it
+   is the critic, below, who accepts or rejects it — a proposer never
+   lowers its own scrutiny. The proposal also carries a
    **Guardrails** line: what this change must not introduce (a new
    dependency, a new abstraction, a changed public signature, a widened
    seam), named concretely, so the critic and Verify have a negative to
@@ -706,8 +730,9 @@ verify` and `also_model: <id>`: a second, read-only step to dispatch
 concurrently with the first, never a replacement for it. On a role-bearing
 action `next` also prints `prompt: <path>` right after `reason:` (and
 `also_prompt: <path>` right after `also_model:` on `check`) — the engine
-prompt for that role; see **Role overlays** above. Actions: `propose`,
-`critique`, `revise`, `gate0`, `apply` (tier `none` — bookkeeping only, no
+prompt for that role; see **Role overlays** above. Actions: `classify`,
+`grill` (tier `none` — the orchestrator runs the interview itself),
+`propose`, `critique`, `revise`, `gate0`, `apply` (tier `none` — bookkeeping only, no
 worker dispatched), `split`, `unit-spawn`, `unit-critique`, `unit-revise`,
 `unit-merge`, `merge-conflict`, `units-merged`, `check`, `fix`, `verify`,
 `sweep`, `tasks-open`, `archive`, `merge-lane`, `gate1`, `gate2-manual`,

@@ -64,7 +64,8 @@ Every OpenSpec CLI call below gets `--store <slug>` appended — e.g. `openspec 
   - Read active code boundaries and structural modules.
   - Draft explicit architectural intent into a temporary delta spec.
   - Predict potential side effects or breaking changes in downstream dependencies.
-  - **Classify first, on four pillars:** scope, blast radius, novelty, dependency impact — one line each in the proposal, plus a **Guardrails** line naming what the change must not introduce. The critic checks the readings; the proposer never lowers its own scrutiny.
+  - **Classify first, on four pillars:** scope, blast radius, novelty, dependency impact — recorded in state (`pillars`) by a `classify` step before anything is drafted, repeated one line each in the proposal, plus a **Guardrails** line naming what the change must not introduce. The critic checks the readings; the proposer never lowers its own scrutiny.
+  - **Grill unless trivial:** any pillar above its lowest reading sends the change through grill mode's in-change entry (below) before Propose — the human settles what and how, then autonomy takes over. Only a change trivial on every pillar skips it.
   - **Fast path for simple, non-breaking fixes:** when all four pillars read lowest (one file or seam, nothing breaks outside it, a known pattern, no new dependency), skip the extended exploration above and draft the smallest delta spec that captures the fix, then send it straight to critique. Gate 0 still fires unchanged — the human still sees and accepts the short resume before Apply starts. This path only shortens how much drafting happens before critique, never the gate itself. If, once the code is examined, the fix turns out to touch a public API, change behavior other code depends on, require a migration, or otherwise ripple outside the local fix, abandon the fast path and run full Phase 1 exploration instead.
 
     For a request Propose classified this way, Gate 0's structured choice gains a third option, **"Accept — light lifecycle,"** beside Accept and Request changes. Light changes: drafting and revising happen at the `standard` tier (the critic still resolves one tier above, to `deep`); Apply continues the proposer's worker where the host can resume an agent, else dispatches a fresh `standard` worker; a green gate with warnings skips the sweep round instead of running it; a non-UI leaf unit green on its first iteration merges without a unit critic (Verify still reads the merged diff). For a change already drafted at `deep` and critiqued at `max` before this Gate 0 — because the human is only now choosing light — only that last part, the sweep skip, is left to apply. Light never skips: Gate 0 itself, the proposal critic, the full gate (including the dead-code pass), Verify, the manual-task block, or Gate 2. Gate 0 stays mandatory either way; plain Accept runs the full lifecycle; the orchestrator never picks light on the human's behalf — only the human, here, or triage on a bugfix change it opens.
@@ -134,17 +135,27 @@ the proposal", "only apply"). Treat such a request as the whole change and
 run it, subject to Gate 0; if the human genuinely wants to stop early
 beyond that, they say so and the change is left `blocked` per the
 orchestration doc. The only invocation that is not a full run is
-grill mode, which precedes a change and is not a phase of one; Gate 0 stays the
-only pause inside a change.
+standalone grill mode, which precedes a change and is not a phase of one. Inside a
+change there are two pauses: the grill interview before Propose on any change that is
+not trivial on every pillar (the human settles what and how; every decision after it is
+the engine's), and Gate 0.
 
 ## Grill mode
 
-Grill mode precedes a change: there is no change name, state file, slot or
-worktree, so nothing for `next` to decide. The orchestrator runs it
-directly — the same way it runs Gate 0's presentation rules — when a
-request asks to grill a plan or idea before a change, e.g.
-`/openspec-orchestrator grill how should we approach rate limiting?`. A
-request to implement something is a change, never grill mode.
+Grill mode has two entries. **Standalone**: a request asks to grill a plan
+or idea before a change, e.g. `/openspec-orchestrator grill how should we
+approach rate limiting?` — no change name, state file, slot or worktree,
+so nothing for `next` to decide; the orchestrator runs the sequence below
+directly. **In-change**: a request to implement something opens a change,
+and `next` returns `grill` after `classify` whenever a pillar reads above
+trivial (AUTONOMOUS-ORCHESTRATION.md Phases step 3). Then steps 1–2 below
+are already done, steps 3–5 run as written, and step 6's handoff is
+replaced by `state set ... grill done` and the next `next`, which returns
+`propose`; critique and Gate 0 follow as on every change. "Make every
+decision yourself, ask nothing" in a request does
+not skip this entry: it applies after what and how are settled here, not
+to settling them. Only `state set ... grill skipped:human` skips it, and
+only the human records that.
 
 Sequence:
 
@@ -182,8 +193,10 @@ Sequence:
    summary — the request restated in the glossary's canonical terms,
    naming any ADR written — and an offer to start the change with it:
    starting means invoking the full run with that summary as the
-   request. No offer when the external-mode compare above tripped. Gate 0
-   is still the only pause once that change opens.
+   request. No offer when the external-mode compare above tripped. A
+   change opened from this handoff has already been grilled: record
+   `state set ... grill done` right after `state init`, so `next` goes
+   from `classify` straight to `propose`.
 
 ## Optional convenience
 

@@ -340,7 +340,33 @@ check_out "next: unknown lifecycle errors" "unknown lifecycle" bash -c "$RC next
 # next: the orchestration policy as code — walk a change through the lifecycle
 N="$RC next --store teststore --name feat-next"
 $RC state init --store teststore --name feat-next
-check_out "next: fresh change -> propose at deep" "action: propose" $N
+check_out "state init seeds pillars and grill" "pillars: \"\"" $RC state get --store teststore --name feat-next
+check_out "next: fresh change -> classify first" "action: classify" $N
+check_out "next: classify runs at standard" "tier: standard" $N
+check_out "next: classify names the pillar vocabulary" "scope=file|seam|seams;blast=none|project|public;novelty=known|new;deps=none|dev|runtime" $N
+check_line "next: classify prints the proposer prompt" "prompt: $PWD/$SKILL/scripts/roles/proposer.md" $N
+$RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=huge;deps=none"
+check_out "next: unknown pillar value is refused" "unknown novelty 'huge'" bash -c "$N 2>&1; true"
+$RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=known"
+check_out "next: missing pillar is refused" "missing 'deps'" bash -c "$N 2>&1; true"
+$RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=known;deps=none"
+check_out "next: trivial on every pillar -> propose, grill skipped" "action: propose" $N
+check_out "next: trivial reason says grill skipped" "grill mode skipped" $N
+$RC state set --store teststore --name feat-next pillars "scope=file;blast=none;novelty=known;deps=none"
+check_out "next: one file is trivial too" "action: propose" $N
+$RC state set --store teststore --name feat-next pillars "scope=seams;blast=project;novelty=new;deps=runtime"
+check_out "next: non-trivial and not grilled -> grill" "action: grill" $N
+check_out "next: grill is tier none" "tier: none" $N
+check_out "next: grill reason says autonomy starts after it" "Autonomy starts after this" $N
+out_grill="$($N)"
+case "$out_grill" in *"prompt:"*) echo "FAIL next: grill prints no role prompt"; fails=$((fails+1)) ;; *) echo "ok   next: grill prints no role prompt" ;; esac
+$RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=new;deps=none"
+check_out "next: a single pillar above trivial is enough for grill" "action: grill" $N
+$RC state set --store teststore --name feat-next grill skipped:human
+check_out "next: human-recorded skip -> propose" "action: propose" $N
+$RC state set --store teststore --name feat-next grill done pillars "scope=seams;blast=project;novelty=new;deps=runtime"
+check_out "next: grilled change -> propose at deep" "action: propose" $N
+check_out "next: propose reason cites the glossary and ADRs" "Project glossary and ADRs" $N
 check_out "next: propose model is deep" "model: claude-opus-5-custom" $N
 check_line "next: propose prints the engine proposer prompt" "prompt: $PWD/$SKILL/scripts/roles/proposer.md" $N
 out_pr="$($N)"
@@ -505,7 +531,7 @@ check_out "next: red gate, verify not converging -> gate1" "verify not convergin
 # ladder rule), no sweep round; everything else matches full
 L="$RC next --store teststore --name feat-light"
 $RC state init --store teststore --name feat-light
-$RC state set --store teststore --name feat-light lifecycle light
+$RC state set --store teststore --name feat-light lifecycle light pillars "scope=file;blast=none;novelty=known;deps=none"
 check_out "next: light fresh change -> propose at standard" "action: propose" $L
 check_out "next: light propose tier is standard" "tier: standard" $L
 $RC session append --store teststore --name feat-light role worker phase proposed tier standard model claude-sonnet-5 transcript_id lp1

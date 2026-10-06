@@ -56,6 +56,10 @@ flowchart TD
 
     subgraph I[Autonomous change engine]
         direction TB
+        P0[Classify: four pillar readings<br/>standard tier] --> P0t{Trivial on<br/>every pillar?}
+        P0t -- no --> GRILL[["Grill (human)<br/>settle what and how:<br/>glossary + ADRs"]]
+        GRILL --> P1
+        P0t -- yes --> P1
         P1[Propose: draft delta spec + seam list<br/>deep tier] --> P1c{Critique clean?}
         P1c -- blocking, rounds left --> P1
         P1c -- clean/warnings --> P2[Apply: commit change worktree,<br/>split into units]

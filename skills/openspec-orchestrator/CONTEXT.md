@@ -208,13 +208,20 @@
   seam-list line names the field rather than resolving it. Other files are
   read only to confirm a seam is real or a dependency claim true, never to
   explore the codebase at large.
-- **Classification**: Propose's reading of the request on four pillars —
-  scope, blast radius, novelty, dependency impact — written into the
-  proposal and shown in the Gate 0 resume. All lowest → fast-path fix
-  (Gate 0 offers `light`); blast radius or dependency impact beyond the
-  project, or independently-mergeable parts → initiative; else a `full`
-  change. The critic grades the readings under Right size; a pillar read
-  low to earn the fast path is `blocking`.
+- **Classification**: the four pillar readings — scope, blast radius,
+  novelty, dependency impact — recorded by the `classify` step (tier
+  `standard`) in the state field `pillars` as
+  `scope=file|seam|seams;blast=none|project|public;novelty=known|new;deps=none|dev|runtime`
+  (`next` refuses other values), repeated in the proposal and shown in
+  the Gate 0 resume. Trivial — scope `file` or `seam`, the other three at
+  their first value — → fast-path fix, grill skipped, Gate 0 offers
+  `light`; blast radius or dependency impact beyond the project, or
+  independently-mergeable parts → initiative; else a `full` change that
+  goes through grill first. The critic grades the readings under Right
+  size; a pillar read low to earn the fast path is `blocking`.
+- **Grill (state field)**: `""`, `done`, or `skipped:human`. `next`
+  returns `grill` for a classified, non-trivial change until it is `done`
+  or `skipped:human`; only the human records the skip.
 - **Guardrails**: the proposal line naming what the change must not
   introduce (dependency, abstraction, public signature, widened seam).
   The critic checks it names real risks for the seam; Verify grades the
@@ -224,7 +231,9 @@
   interview records for one project. Distinct from this engine's own
   glossary (this file); written only by grill mode, read by the proposer
   and the critic.
-- **Grill mode**: the one pre-change mode (SKILL.md **Grill mode**). First
+- **Grill mode**: the interview that settles what and how (SKILL.md
+  **Grill mode**), with two entries: standalone before any change, or
+  in-change when `next` returns `grill` after `classify`. First
   round analyses the request (two or three approaches, no writes);
   the interview then runs `grilling` and `domain-modeling` to sharpen
   terms and decisions into the Project glossary and ADRs; an external-mode

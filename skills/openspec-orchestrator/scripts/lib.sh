@@ -286,7 +286,7 @@ role_prompt() {
 # dispatches with, empty for none-tier actions.
 role_for_action() {
   case "$1" in
-    propose|revise) echo proposer ;;
+    classify|propose|revise) echo proposer ;;
     critique) echo critic ;;
     unit-spawn|unit-revise|fix|sweep|merge-conflict|split) echo worker ;;
     unit-critique) echo unit-critic ;;
@@ -939,6 +939,36 @@ critic_tier()  { critic_pick "$1" "$2" | cut -d' ' -f1; }
 FIX_CAP=3
 PROPOSE_CAP=2
 
+# Pillar readings, recorded by the classify step as
+# `scope=<v>;blast=<v>;novelty=<v>;deps=<v>`. Each value list is ordered
+# lowest first; the first entry of each is the trivial reading.
+PILLAR_SCOPE="file seam seams"
+PILLAR_BLAST="none project public"
+PILLAR_NOVELTY="known new"
+PILLAR_DEPS="none dev runtime"
+
+# pillars_check <pillars> -> 0 when every key is present with a known
+# value; prints the first problem on stderr otherwise.
+pillars_check() {
+  local p="$1" k v allowed
+  for k in scope blast novelty deps; do
+    v="$(map_get "$p" "$k")"
+    case "$k" in scope) allowed="$PILLAR_SCOPE" ;; blast) allowed="$PILLAR_BLAST" ;; novelty) allowed="$PILLAR_NOVELTY" ;; deps) allowed="$PILLAR_DEPS" ;; esac
+    [ -n "$v" ] || { echo "pillars: missing '$k' (expected scope=..;blast=..;novelty=..;deps=..)" >&2; return 1; }
+    case " $allowed " in *" $v "*) ;; *) echo "pillars: unknown $k '$v' (expected one of: $allowed)" >&2; return 1 ;; esac
+  done
+}
+
+# pillars_trivial <pillars> -> 0 when every pillar is at its lowest
+# reading except scope, where one seam still counts as trivial (a
+# localized fix usually touches one seam, not one file). Only such a
+# change skips grill mode.
+pillars_trivial() {
+  local p="$1"
+  case "$(map_get "$p" scope)" in file|seam) ;; *) return 1 ;; esac
+  [ "$(map_get "$p" blast)" = none ] && [ "$(map_get "$p" novelty)" = known ] && [ "$(map_get "$p" deps)" = none ]
+}
+
 # emit_role_lines <slug> <action> -> for a role-bearing action prints
 # `prompt: <path>`, then `overlay: <path>` when the store has an overlay
 # for that role.
@@ -1146,6 +1176,7 @@ next_action() {
   manual_open="$(state_field "$f" manual_tasks_open)"
   manual_accept="$(state_field "$f" manual_accept)"
   local spec_amend; spec_amend="$(state_field "$f" spec_amend)"
+  local pillars grill; pillars="$(state_field "$f" pillars)"; grill="$(state_field "$f" grill)"
   local ceffort; ceffort="$(checker_effort "$slug")"
   case "$lc" in
     full) ptier=deep ;;
@@ -1192,7 +1223,18 @@ next_action() {
       case "$crit" in
         "")
           if [ -z "$(proposer_model "$slug" "$name")" ]; then
-            emit propose "$ptier" "$(model_for_tier "$slug" "$ptier")" "no draft yet: Propose runs at $ptier ($lc lifecycle)"
+            # Shape before draft: classify, then grill unless trivial, then propose.
+            if [ -z "$pillars" ]; then
+              emit classify standard "$(model_for_tier "$slug" standard)" "no classification yet: read the request and the code, then record the four pillar readings with state set pillars 'scope=file|seam|seams;blast=none|project|public;novelty=known|new;deps=none|dev|runtime' — the critic grades these later, so read them for the code as it is"
+            elif ! pillars_check "$pillars"; then
+              return 1
+            elif pillars_trivial "$pillars"; then
+              emit propose "$ptier" "$(model_for_tier "$slug" "$ptier")" "trivial on every pillar ($pillars): grill mode skipped, Propose drafts the smallest delta spec at $ptier ($lc lifecycle)"
+            elif [ "$grill" != done ] && [ "$grill" != skipped:human ]; then
+              emit grill none - "not trivial ($pillars) and grill not yet run: run grill mode on this request now (SKILL.md Grill mode, in-change entry) — analysis round, then grilling and domain-modeling into the root's Project glossary and ADRs; then state set grill done. Autonomy starts after this: the human settles what and how here, the engine decides everything else"
+            else
+              emit propose "$ptier" "$(model_for_tier "$slug" "$ptier")" "classified ($pillars), grill $grill: Propose drafts at $ptier ($lc lifecycle) citing the Project glossary and ADRs"
+            fi
           else
             emit critique "$(critic_tier "$slug" "$name")" "$(critic_model "$slug" "$name")" "draft exists, not yet critiqued: critic one tier above the proposer"
             emit_effort
