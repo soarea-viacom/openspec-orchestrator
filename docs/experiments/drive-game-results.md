@@ -9,61 +9,55 @@ and store session logs; test counts from a fresh `npm test` run afterwards.
 - **Top-level model differed.** The raw run used Fable 5.1; every orchestrator run used
   Opus 5.5 as its own session model (sub-agents followed the tier table). The one-variable
   rule was not met in any round.
-- **Folder names were inverted in v1.** `test-sdd` was the raw run and `test-raw` the
-  orchestrator. Renamed to `test-fable` for v2; `test-raw` retired after v1.
-- **The v1 blind review was not blind.** The reviewer saw the folder paths. No independent
-  review was run for `test-grill` v1 or for either v2 run; v2 product rows are self-measured.
-- **The first orchestrator run had no engine.** Until 1.9.0 the Atlas install carried only
-  `SKILL.md`; the 1.10 run below followed the prose and improvised the lifecycle (zero
-  `run-change` calls). Fixed in 1.9.0 by shipping `skills/openspec-orchestrator/` whole.
+- **The raw run's folder was first named `test-sdd`**, renamed to `test-fable` for v2.
+- **No independent review has been run on these two repos.** Product rows are
+  self-measured (fresh `npm test`, static counts). A third v1 run, an orchestrator on a
+  prose-only install, was reviewed and is excluded here; its findings fed releases 1.9.0
+  and 1.12.0 and are recorded in those commits.
 
 ## v1 — build the game from an empty folder
 
-| | Raw Fable (`test-fable`) | Orchestrator 1.10, prose only (`test-raw`) | Orchestrator 1.12 + grill (`test-grill`) |
-|---|---|---|---|
-| Engine commit | – | a905231 (install was `SKILL.md` alone) | 49a21f2 |
-| Started (UTC) | 10-05 20:46 | 10-05 21:13 | 10-06 11:40 |
-| Wall clock to merge | 23 min | 103 min | 215 min |
-| Human wait | 0 | 26 min, 4 stops (root, Gate 0, manual tasks, Gate 2) | 110 min, 7 stops (root, grill, Gate 0, Gate 1 ×3, manual, Gate 2) |
-| Machine time | 23 min | 77 min | ~105 min |
-| Grill | – | – | 1 round, 5 questions, "all recommended" in 70 s; glossary 9 terms, ADR 0001 stack, ADR 0002 flat world |
-| Pillars | – | – | seams / project / new / runtime |
-| Sub-agents | 0 | 5, all Opus | 22 |
-| Model-minutes active | Fable 23 | Opus ~45 | Opus 113, Sonnet ~79, Fable 22 |
-| Output tokens | 191K | 217K + 185K sub-agents | 191K + 485K sub-agents |
-| Unit tiers | – | n/a (same worktree) | 3 deep, 5 standard |
-| Unit critics | – | none | 3 Fable, 5 Opus |
-| Unit iterations | – | – | 22, 5 red, one unit at the cap |
-| Verify rounds | – | 1 | 3 (spec → spec → clean) |
-| Fix rounds | – | 1 | 2 |
-| Source lines / files | 1,882 / 22 | 1,799 / 18 | 2,409 / 23 |
-| Map JSON lines | 88 | 124 | 863 |
-| Unit tests (files) | 32 (4) | 48 (11) | 81 (7) |
-| Playwright tests | 4 | 4 | 1 |
-| README lines | 80 | 66 | 57 |
-| Fresh `npm test` | pass, knip clean | pass, knip clean | pass, knip clean |
-| Toolchain | vite 6, 1 critical audit finding | current, Playwright pinned | current, pinned |
+| | Raw Fable (`test-fable`) | Orchestrator 1.12 + grill (`test-grill`) |
+|---|---|---|
+| Engine commit | – | 49a21f2 |
+| Started (UTC) | 10-05 20:46 | 10-06 11:40 |
+| Wall clock to merge | 23 min | 215 min |
+| Human wait | 0 | 110 min, 7 stops (root, grill, Gate 0, Gate 1 ×3, manual, Gate 2) |
+| Machine time | 23 min | ~105 min |
+| Grill | – | 1 round, 5 questions, "all recommended" in 70 s; glossary 9 terms, ADR 0001 stack, ADR 0002 flat world |
+| Pillars | – | seams / project / new / runtime |
+| Sub-agents | 0 | 22 |
+| Model-minutes active | Fable 23 | Opus 113, Sonnet ~79, Fable 22 |
+| Output tokens | 191K | 191K + 485K sub-agents |
+| Unit tiers | – | 3 deep, 5 standard |
+| Unit critics | – | 3 Fable, 5 Opus |
+| Unit iterations | – | 22, 5 red, one unit at the cap |
+| Verify rounds | – | 3 (spec → spec → clean) |
+| Fix rounds | – | 2 |
+| Source lines / files | 1,882 / 22 | 2,409 / 23 |
+| Map JSON lines | 88 | 863 |
+| Unit tests (files) | 32 (4) | 81 (7) |
+| Playwright tests | 4 | 1 |
+| README lines | 80 | 57 |
+| Fresh `npm test` | pass, knip clean | pass, knip clean |
+| Toolchain | vite 6, 1 critical audit finding | current, pinned |
 
-### v1 review (test-fable vs test-raw, reviewer saw paths)
+### v1 review
 
-Both passed all 12 checklist items. Reviewer verdict: `test-raw` (the orchestrator) "is the
-one I would ship" on verification depth and toolchain health. Defects: raw 1 major (audit)
-+ 5 minor; orchestrator 6 minor (trees not solid, no map bounds, sluggish offroad, no
-engine braking, lenient reset test, Esc-exit opens settings). Full report in the reviewer
-session "Game implementation review A/B".
+The raw run was reviewed (not blind) against the excluded prose-only run: all 12 checklist
+items passed; defects 1 major (npm audit, critical) + 5 minor (rebind unbinds the other
+action, a weak "both maps" e2e, `postinstall` download, unused `dt`, asphalt ≈ tarmac
+visually). `test-grill` v1 was not reviewed; the collision gap below was found by hand.
 
 ### v1 findings
 
 - `test-grill`: **the car drove through buildings and trees.** The brief said "static
   buildings" and "realistic"; no artifact named collision; grill asked five how-questions;
   the critic's Fidelity read "nothing beyond the request"; every checker passed a silent
-  proposal. The other two runs added building collision unasked. → 1.14.0.
+  proposal. The raw run added building collision unasked. → 1.14.0.
 - `test-grill`: a Sonnet unit worker hung 142 min on a gate command; the unit was rescued
   by an Opus revise and merged, so the critical path was unaffected, but it is most of the
   Sonnet column. → 1.13.0 (`gate_timeout`, written by that session).
-- `test-raw` (1.10): the proposer chained its split, so "a unit others depend on" matched 7
-  of 8 units: 7 deep workers, 7 Fable critics, 40 Fable-minutes for no fan-out. → 1.12.0.
-- `test-raw` (1.10): Playwright in `gate_quick`, 28 s × 17 iterations. → 1.12.0 (`gate_ui`).
 - `test-grill`: Verify round 3 ran on Sonnet because the round-2 fixer was `mechanical` and
   the tier-above rule picked `standard`. Open: a `deep` floor for Verify.
 - `test-grill`: three Gate 1 stops; the 53-minute wait on the first spec amendment is the
@@ -111,9 +105,9 @@ session "Game implementation review A/B".
 
 | Version | Change | Triggered by |
 |---|---|---|
-| 1.9.0 | Ship the engine with the skill (directory install) | v1 `test-raw` ran on prose only |
-| 1.11.0 | classify → grill unless trivial → propose | v1 `test-raw` dependency chain nobody saw |
-| 1.12.0 | Foundation = two or more dependents; `gate_ui` | v1 `test-raw` 7 deep units, Playwright per iterate |
+| 1.9.0 | Ship the engine with the skill (directory install) | excluded prose-only run (no `run-change` calls) |
+| 1.11.0 | classify → grill unless trivial → propose | excluded run's dependency chain nobody saw |
+| 1.12.0 | Foundation = two or more dependents; `gate_ui` | excluded run: 7 deep units, Playwright per iterate |
 | 1.13.0 | `gate_timeout`, timeouts on background commands | v1 `test-grill` 142-min hang |
 | 1.14.0 | Implied baseline is part of the request; never ask the obvious | v1 `test-grill` car through walls |
 | 1.15.0 | Advisor at second red; red-after-advice and spec contradiction → Gate 1 | v2 `test-grill` five reds |
@@ -122,5 +116,5 @@ session "Game implementation review A/B".
 
 - Fable as the orchestrator's own model, to close the one-variable gap.
 - A `deep` floor for Verify regardless of the fixer's tier.
-- A blind review of both v2 repos with the v2 checklist (collision item included).
+- A blind review of both repos with the v1 and v2 checklists (collision item included).
 - Turn budget or checkpoint for a single UI unit worker.
