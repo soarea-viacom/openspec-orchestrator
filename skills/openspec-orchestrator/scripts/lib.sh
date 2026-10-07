@@ -486,6 +486,15 @@ map_get() {
 
 UNIT_NAME_RE='^[a-z0-9]+(-[a-z0-9]+)*$'
 
+# Unit size caps: a unit is a tiny testable piece, not a file-ownership
+# bucket. Measured: the units that ran 229 and 349 turns owned 13-14
+# files each; the ones that went green first time owned 3-6.
+UNIT_MAX_FILES=8
+UNIT_MAX_TASKS=3
+unit_max_files() { local v; v="$(orch_scalar "$1" unit_max_files)"; echo "${v:-$UNIT_MAX_FILES}"; }
+unit_max_tasks() { local v; v="$(orch_scalar "$1" unit_max_tasks)"; echo "${v:-$UNIT_MAX_TASKS}"; }
+count_csv() { printf '%s' "$1" | tr ',' '\n' | grep -c . || true; }
+
 # units_check <store-slug> <name> -- state-only: reads the change's units,
 # unit_deps, unit_tasks, seams fields and nothing else (no tasks.md, no
 # worktree). Replaces an LLM critique of the split with mechanical
@@ -513,6 +522,19 @@ units_check() {
     fi
     local files; files="$(map_get "$units_v" "$u")"
     [ -n "$files" ] || { echo "units check: unit '$u' has no files" >&2; return 1; }
+  done
+
+  # size caps: over the cap is an error unless the unit is named in
+  # unit_size_ok (a justification the proposal must carry), then a warning
+  local maxf maxt okv; maxf="$(unit_max_files "$slug")"; maxt="$(unit_max_tasks "$slug")"
+  okv="$(state_field "$f" unit_size_ok)"
+  for u in $units_list; do
+    local nf nt; nf="$(count_csv "$(map_get "$units_v" "$u")")"; nt="$(count_csv "$(map_get "$unit_tasks_v" "$u")")"
+    [ "$nf" -gt "$maxf" ] || [ "$nt" -gt "$maxt" ] || continue
+    case ",$okv," in
+      *",$u,"*) echo "units check: unit '$u' is over the size cap ($nf files, $nt tasks; cap $maxf/$maxt) — allowed by unit_size_ok" >&2 ;;
+      *) echo "units check: unit '$u' is over the size cap ($nf files, $nt tasks; cap $maxf files / $maxt tasks): split it into smaller units, or justify it in the proposal and record state set unit_size_ok $u" >&2; return 1 ;;
+    esac
   done
 
   # seam files: union of every seams group's file list
@@ -928,11 +950,28 @@ unit_critic_pick() {
 # With no session history at all the generator is assumed at its nominal
 # tier: implementers at standard, proposers at deep (Propose always runs
 # there). An entry with a model but no tier is inferred, not defaulted.
+# Verify's floor: never below deep, and never below the previous Verify
+# round on this change. The tier-above rule sizes the checker to the last
+# fixer; after a mechanical fix that put the final sign-off on a standard
+# model (measured), and a round that closes a stronger round's findings
+# cannot be read by a weaker model.
+VERIFY_FLOOR=deep
+tier_index() { local i=0 t; for t in $TIERS; do [ "$t" = "$1" ] && { echo "$i"; return 0; }; i=$((i + 1)); done; echo -1; }
 verify_pick() {
   local t m; t="$(implementer_tier "$1" "$2")"; m="$(implementer_model "$1" "$2")"
   [ -n "$t$m" ] || t=standard
-  checker_pick "$1" "$t" "$m" implementer
+  local pick; pick="$(checker_pick "$1" "$t" "$m" implementer)" || return 1
+  local above="${pick%% *}" prev; prev="$(last_session_field "$1" "$2" verify tier)"
+  local chosen="$above" note=""
+  if [ "$(tier_index "$VERIFY_FLOOR")" -gt "$(tier_index "$chosen")" ]; then chosen="$VERIFY_FLOOR"; note="floor: $VERIFY_FLOOR"; fi
+  if [ -n "$prev" ] && [ "$(tier_index "$prev")" -gt "$(tier_index "$chosen")" ]; then chosen="$prev"; note="floor: previous round ran at $prev"; fi
+  local model; model="$(model_for_tier "$1" "$chosen")"
+  if [ "$model" = "$m" ] && [ -z "$(checker_effort "$1")" ]; then
+    echo "verify floor tier $chosen resolves to the implementer's own model ($m) — check orchestration.model_* in $(store_config "$1")" >&2; return 1
+  fi
+  echo "$chosen $model${note:+ $note}"
 }
+verify_note() { verify_pick "$1" "$2" 2>/dev/null | cut -d' ' -f3-; }
 critic_pick() {
   local t m; t="$(proposer_tier "$1" "$2")"; m="$(proposer_model "$1" "$2")"
   [ -n "$t$m" ] || t=deep
@@ -1310,7 +1349,8 @@ next_action() {
         "")
           # Both are read-only readers of the committed tree, so they run
           # at once; the pass line (green AND clean) is unchanged.
-          emit check none - "run the full gate and Verify concurrently on the committed tree; record last_gate_result green|red and last_verify_result"
+          local cnote; cnote="$(verify_note "$slug" "$name")"
+          emit check none - "run the full gate and Verify concurrently on the committed tree; record last_gate_result green|red and last_verify_result${cnote:+; verify $cnote}"
           local vm; vm="$(verify_model "$slug" "$name")" || vm=-
           printf 'also: verify\nalso_model: %s\n' "$vm"
           local vp; vp="$(role_prompt verifier)" || return 1
@@ -1334,7 +1374,8 @@ next_action() {
         green)
           case "$verify" in
             "")
-              emit verify "$(verify_tier "$slug" "$name")" "$(verify_model "$slug" "$name")" "gate green, not yet verified: checker one tier above the implementer"
+              local vnote; vnote="$(verify_note "$slug" "$name")"
+              emit verify "$(verify_tier "$slug" "$name")" "$(verify_model "$slug" "$name")" "gate green, not yet verified: checker one tier above the implementer${vnote:+; $vnote}"
               emit_effort ;;
             clean)
               emit tasks-open none - "verify clean: run 'tasks open' to record manual_tasks_open, then record verified" verified ;;

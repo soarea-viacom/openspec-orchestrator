@@ -64,6 +64,7 @@ context: |
 #     parallel: true          # false = one unit per change
 #     gate_quick: "npm run lint && npm run typecheck"
 #     gate_ui: "npx playwright test"   # UI units only, after gate_quick
+#     unit_max_files: 8 / unit_max_tasks: 3   # unit size cap; unit_size_ok state field exempts a justified unit
 #     gate_full: "npm test && npx knip"
 #     model_mechanical / model_standard / model_deep / model_max: per-tier overrides
 #     checker_effort: high    # lets a checker share the generator's model

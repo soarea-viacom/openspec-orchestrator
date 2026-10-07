@@ -50,6 +50,11 @@
   `change/<name>` once its deps have. `split` (tier `deep` under the full
   parallel path, else `units single` at `none`) writes the four fields and
   runs `units_check`.
+- **Unit size cap**: `UNIT_MAX_FILES` (8) and `UNIT_MAX_TASKS` (3), store
+  overrides `orchestration.unit_max_files` / `unit_max_tasks`; `units
+  check` refuses a unit over either unless the change's `unit_size_ok`
+  field names it (then it warns). Set only with a justification in the
+  proposal.
 - **Unit state file**: `<store>/.orchestration/state/<name>.units/<unit>.yaml`
   — one file per unit, not a field on the change file, because concurrent
   unit workers calling `unit iterate` would otherwise race a shared
@@ -137,6 +142,11 @@
   Summarized in `last_critique_result` as `clean`, `warnings:<m>`,
   `blocking:<n>`, or `request`; only `blocking` starts a round. Rounds counted in `propose_rounds`, cap 2, independent of
   `fix_attempts`.
+- **Verify floor**: Verify runs at the highest of three tiers — one above
+  the last implementer, the previous Verify round's tier on this change,
+  and `deep` (`VERIFY_FLOOR`). `model verify` and `next` name the floor
+  when it, not the tier-above rule, decided. Verify only; the critic and
+  unit critic are unaffected.
 - **Verify report**: `<store>/.orchestration/state/<change>.verify.md`,
   written by the Verify checker and overwritten each round (current
   record, like the state file). Each finding carries the proposal

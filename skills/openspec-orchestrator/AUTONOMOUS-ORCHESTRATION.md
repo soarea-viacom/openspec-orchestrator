@@ -363,8 +363,17 @@ append`, never edited after the fact.
    `ui_units` (`<u>,<u>`), then runs `units check` (state-only: acyclic
    deps, every dep a known unit, every file in some `seams` group, two
    units with overlapping files ordered by a dep path, every task id in at
-   most one unit — the CLI also prints `unassigned: <id>` for a tasks.md
-   id in no unit, not an error). Under `lifecycle: light` or `parallel:
+   most one unit, and **every unit within the size cap** — the CLI also
+   prints `unassigned: <id>` for a tasks.md id in no unit, not an error).
+   The cap is `UNIT_MAX_FILES` (8) files and `UNIT_MAX_TASKS` (3) tasks per
+   unit, overridable per store as `orchestration.unit_max_files` /
+   `unit_max_tasks`; a unit over it is an error unless its name is in the
+   state field `unit_size_ok`, which the generator may set only with a
+   justification in the proposal (a wiring unit that must touch many
+   files), and then `units check` warns instead. A unit is a tiny testable
+   piece, not a file-ownership bucket: measured, the units that ran 229
+   and 349 turns owned 13–14 files each; the ones green on their first
+   iteration owned 3–6. Under `lifecycle: light` or `parallel:
    false` (**Single-worker baseline** below), `split` instead runs `units
    single [--ui]` at tier `none`: one unit `all` holding every seam file
    and every task id. A change too small to have named more than one seam
@@ -1157,7 +1166,15 @@ loops** gates at once. Escalation is by round number: round 1 mechanical/standar
 triage, round 2 standard, round 3 deep, then Gate 1. Each fixer logs a
 session entry with `phase checking` before Verify reruns, so `model verify`
 sees the fixer as the latest implementer and picks the tier above it to
-re-check its work (a round-3 `deep` fixer is verified at `max`). A worker that fails its own check once retries one tier
+re-check its work (a round-3 `deep` fixer is verified at `max`) — subject
+to Verify's **floor**: never below `deep` (`VERIFY_FLOOR`), and never
+below the tier of the previous Verify round on this change. Without it a
+`mechanical` round-1 fix put the final sign-off on a `standard` model
+(measured), and a round that closes a stronger round's findings cannot be
+read by a weaker one. `next` names the floor in its `reason:` when it,
+not the tier-above rule, set the tier. The critic and the unit critic are
+unsized by this: proposers and unit workers never run `mechanical`, so
+their checkers already sit at `deep` or above. A worker that fails its own check once retries one tier
 up before it counts as a fix round — but before failing, it may ask an
 advisor (below). Record
 `model` and `tier` on every session-history entry — resolve the model with

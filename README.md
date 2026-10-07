@@ -233,6 +233,8 @@ orchestration:
   parallel: true                     # false runs each change as one unit (single-worker baseline)
   gate_quick: "npm run lint && npm run typecheck"
   gate_ui: "npx playwright test"     # UI units only, after gate_quick
+  unit_max_files: 8                  # size cap per unit (default 8 files / 3 tasks)
+  unit_max_tasks: 3
   gate_full: "npm test && npx knip"  # must include a dead-code pass
   model_mechanical: claude-haiku-4-5-20251001   # optional overrides
   model_standard: claude-sonnet-5

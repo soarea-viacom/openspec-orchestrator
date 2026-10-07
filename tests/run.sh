@@ -313,6 +313,38 @@ check "model critic contract lists the glossary between the seam and prior-repor
 check "model critic contract lists the ADRs between the seam and prior-report lines" \
   bash -c "[ ${cg_seam_n:-999} -lt ${cg_adr_n:-0} ] && [ ${cg_adr_n:-999} -lt ${cg_prior_n:-0} ]"
 
+# Verify floor: never below deep, never below the previous Verify round
+mkdir -p "$TMP/store-vf/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  store-vf:
+    local_path: $TMP/store-vf
+EOF
+cat > "$TMP/store-vf/openspec/config.yaml" <<'EOF'
+orchestration:
+  gate_quick: "true"
+  gate_full: "true"
+EOF
+$RC state init --store store-vf --name feat-vf
+$RC session append --store store-vf --name feat-vf role worker phase applying tier standard model claude-sonnet-5 transcript_id v1
+check_out "model verify: standard implementer -> deep (tier-above, no floor note)" "claude-opus-5" $RC model verify --store store-vf --name feat-vf
+vf_full="$($RC model verify --store store-vf --name feat-vf)"; vf_line1="${vf_full%%$'\n'*}"
+check "model verify: first line is the bare model id even with a floor" test "$vf_line1" = claude-opus-5
+$RC session append --store store-vf --name feat-vf role worker phase checking tier mechanical model claude-haiku-4-5-20251001 transcript_id fix1
+check_out "model verify: mechanical fixer still gets a deep Verify" "claude-opus-5" $RC model verify --store store-vf --name feat-vf
+$RC state set --store store-vf --name feat-vf phase checking last_gate_result green
+check_out "next: verify after a mechanical fix names the floor" "floor: deep" $RC next --store store-vf --name feat-vf
+check_out "next: verify tier is deep, not standard" "tier: deep" $RC next --store store-vf --name feat-vf
+$RC session append --store store-vf --name feat-vf role worker phase verify tier max model claude-fable-5-1 transcript_id ver2
+$RC session append --store store-vf --name feat-vf role worker phase checking tier mechanical model claude-haiku-4-5-20251001 transcript_id fix2
+check_out "model verify: never below the previous Verify round" "claude-fable-5-1" $RC model verify --store store-vf --name feat-vf
+check_out "next: verify names the previous round as the floor" "floor: previous round ran at max" $RC next --store store-vf --name feat-vf
+$RC state set --store store-vf --name feat-vf last_gate_result ""
+check_out "next: check's concurrent verify carries the floor too" "also_model: claude-fable-5-1" $RC next --store store-vf --name feat-vf
+$RC session append --store store-vf --name feat-vf role worker phase checking tier deep model claude-opus-5 transcript_id fix3
+check_out "model verify: a deep fixer still goes to max by the tier-above rule" "claude-fable-5-1" $RC model verify --store store-vf --name feat-vf
+vf_out="$($RC next --store store-vf --name feat-vf)"
+case "$vf_out" in *"floor:"*) echo "FAIL next: no floor note when tier-above already wins"; fails=$((fails+1)) ;; *) echo "ok   next: no floor note when tier-above already wins" ;; esac
+
 # initiatives: own record, own critique-round counter, shown as a tree in status
 check "initiative init creates file" $RC initiative init --store teststore --name init-a
 check_out "initiative get has critique_rounds" "critique_rounds: 0" $RC initiative get --store teststore --name init-a
@@ -785,6 +817,35 @@ EOF
 $RC state set --store teststore --name feat-units units "a=x.js" unit_deps "" seams "s=x.js,y.js" unit_tasks "a=1.1"
 check_out "units check CLI: unassigned task printed" "unassigned: 1.2" $RC units check --store teststore --name feat-units
 check "units check CLI exits 0 when the check passes" $RC units check --store teststore --name feat-units
+
+# unit size cap: 8 files / 3 tasks unless unit_size_ok names the unit
+$RC state init --store teststore --name feat-size
+big="f1.js,f2.js,f3.js,f4.js,f5.js,f6.js,f7.js,f8.js,f9.js"
+$RC state set --store teststore --name feat-size seams "s=$big,g.js" units "wiring=$big;leaf=g.js" unit_deps "" unit_tasks "wiring=1.1;leaf=1.2"
+check_out "units check: a unit over the file cap is refused" "over the size cap (9 files, 1 tasks" bash -c "$RC units check --store teststore --name feat-size 2>&1; true"
+check_out "units check: the refusal names the remedy" "unit_size_ok wiring" bash -c "$RC units check --store teststore --name feat-size 2>&1; true"
+$RC state set --store teststore --name feat-size units "wiring=f1.js;leaf=g.js" unit_tasks "wiring=1.1,1.2,1.3,1.4;leaf=1.5"
+check_out "units check: a unit over the task cap is refused" "1 files, 4 tasks" bash -c "$RC units check --store teststore --name feat-size 2>&1; true"
+$RC state set --store teststore --name feat-size unit_size_ok "wiring"
+check "units check: unit_size_ok turns the refusal into a pass" $RC units check --store teststore --name feat-size
+check_out "units check: unit_size_ok still warns" "allowed by unit_size_ok" bash -c "$RC units check --store teststore --name feat-size 2>&1; true"
+$RC state set --store teststore --name feat-size unit_size_ok "" units "wiring=f1.js,f2.js,f3.js,f4.js,f5.js,f6.js,f7.js,f8.js;leaf=g.js" unit_tasks "wiring=1.1,1.2,1.3;leaf=1.5"
+check "units check: exactly at the cap passes" $RC units check --store teststore --name feat-size
+mkdir -p "$TMP/store-cap/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  store-cap:
+    local_path: $TMP/store-cap
+EOF
+cat > "$TMP/store-cap/openspec/config.yaml" <<'EOF'
+orchestration:
+  unit_max_files: 2
+  unit_max_tasks: 1
+  gate_quick: "true"
+  gate_full: "true"
+EOF
+$RC state init --store store-cap --name feat-cap
+$RC state set --store store-cap --name feat-cap seams "s=a.js,b.js,c.js" units "a=a.js,b.js,c.js" unit_deps "" unit_tasks "a=1.1"
+check_out "units check: store overrides the file cap" "cap 2 files / 1 tasks" bash -c "$RC units check --store store-cap --name feat-cap 2>&1; true"
 check "next succeeds on a valid split with no tasks.md anywhere" bash -c "rm -rf '$STORE/openspec/changes/feat-units'; $RC next --store teststore --name feat-units"
 
 check_out "units single --ui builds one unit from the seam union" "units: all=a.js,b.js" bash -c "
