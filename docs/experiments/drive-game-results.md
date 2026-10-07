@@ -59,7 +59,7 @@ visually). `test-grill` v1 was not reviewed; the collision gap below was found b
   by an Opus revise and merged, so the critical path was unaffected, but it is most of the
   Sonnet column. → 1.13.0 (`gate_timeout`, written by that session).
 - `test-grill`: Verify round 3 ran on Sonnet because the round-2 fixer was `mechanical` and
-  the tier-above rule picked `standard`. Open: a `deep` floor for Verify.
+  the tier-above rule picked `standard`. → 1.16.0 (Verify floor).
 - `test-grill`: three Gate 1 stops; the 53-minute wait on the first spec amendment is the
   largest single human-time item in the experiment.
 
@@ -97,7 +97,9 @@ visually). `test-grill` v1 was not reviewed; the collision gap below was found b
   Gate 1 ("add terrain bumps") is one a deep model gives in a minute. → 1.15.0 (advisor
   mandatory at the second consecutive red; red after advice → Gate 1; spec contradiction →
   Gate 1 at first red).
-- The shell UI worker ran 349 turns / 50 min for one unit. Open.
+- The shell UI worker ran 349 turns / 50 min for one unit, owning 14 files; v1's shell
+  owned 13, terrain 12, scaffold 10, while the units green on their first iteration owned
+  3–6. → 1.16.0 (unit size cap, 8 files / 3 tasks).
 - The raw run's time-based e2e assertion is the kind the orchestrator's critic blocks.
 - The raw run added a desert-map regression e2e the orchestrator did not think to.
 
@@ -111,10 +113,10 @@ visually). `test-grill` v1 was not reviewed; the collision gap below was found b
 | 1.13.0 | `gate_timeout`, timeouts on background commands | v1 `test-grill` 142-min hang |
 | 1.14.0 | Implied baseline is part of the request; never ask the obvious | v1 `test-grill` car through walls |
 | 1.15.0 | Advisor at second red; red-after-advice and spec contradiction → Gate 1 | v2 `test-grill` five reds |
+| 1.16.0 | Unit size cap (8 files / 3 tasks, `unit_size_ok` exempts); Verify floor (never below `deep` nor the previous round) | v1 `test-grill` Sonnet final Verify; both runs' 13–14-file units |
 
 ## Still open
 
 - Fable as the orchestrator's own model, to close the one-variable gap.
-- A `deep` floor for Verify regardless of the fixer's tier.
 - A blind review of both repos with the v1 and v2 checklists (collision item included).
-- Turn budget or checkpoint for a single UI unit worker.
+- Turn budget or checkpoint for a single unit worker; the size cap bounds inputs, not turns.
