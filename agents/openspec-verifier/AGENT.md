@@ -1,6 +1,6 @@
 ---
 name: openspec-verifier
-description: Verify, a fresh read on the checker side of the generator/checker split. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.
+description: Verify — grades the committed change against the proposal and its Guardrails. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.
 tools: Read, Write, Bash, Grep, Glob
 effort: high
 ---

@@ -1,6 +1,6 @@
 ---
 name: openspec-worker
-description: a worker on the generator side, confined to your seam. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.
+description: Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.
 tools: Read, Write, Edit, Bash, Grep, Glob
 effort: medium
 ---

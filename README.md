@@ -143,10 +143,8 @@ for r in proposer critic verifier unit-critic worker; do atlas install-agent ope
 
 The five agents carry each role's effort and tool allowlist (`agents/`); the skill's
 `next` names which one to dispatch. Agent definitions load when a session starts, so
-install them before opening the session that runs the skill. Atlas writes
-`~/.claude/agents/openspec-<role>/AGENT.md`; if your Claude Code only picks up flat files,
-`cp agents/openspec-<role>/AGENT.md ~/.claude/agents/openspec-<role>.md` is equivalent.
-Without them the skill still runs, at the session's effort.
+install them before opening the session that runs the skill. Without them the skill still
+runs, at the session's effort.
 
 Future releases are picked up with `atlas update-skill openspec-orchestrator`, and
 `atlas versions-skill openspec-orchestrator` lists available versions. This is an
