@@ -30,7 +30,12 @@
   <transcript-id>`, which enforces the caps (one per worker task, two per
   change — `ADVISOR_CAP` in `scripts/lib.sh`) and writes the `role advisor
   tier deep for=<worker>` session entry itself; `session append` refuses
-  that role. Never from `deep` and never from a checker. Distinct from tier escalation, which re-runs the
+  that role. Never from `deep` and never from a checker. Required, not
+  optional, for a unit worker at its second consecutive red
+  (`REDS_BEFORE_ADVISOR`): `unit iterate` refuses to run again until
+  `advisor request --unit <u>` has been granted, and a red after the
+  answer fails the unit with `fail_reason red-after-advice` straight to
+  Gate 1. Distinct from tier escalation, which re-runs the
   whole task at the higher tier.
 - **Blackboard**: the orchestrator-owned files agents share through —
   proposal, seam list, state, reports. The only channel between agents;
@@ -52,7 +57,12 @@
   `reviewing` → `reviewed` → `merged`, or `failed`, or `conflict` →
   `resolving`), `iterations`, `base` (the sha the unit branched from),
   `checks_commit`, `screenshot` (absolute path of the latest green
-  iteration's PNG), `critique`, `merge_attempts`. Written through `unit
+  iteration's PNG), `critique`, `merge_attempts`, `reds_in_row`
+  (consecutive red iterations, reset by a green), `advised` (the
+  iteration count when `advisor request --unit` was granted), and
+  `fail_reason` (`spec` | `iteration-cap` | `red-after-advice` |
+  `merge-conflict`; `unit set` refuses other values) which `next` reads to
+  word the `gate1` it returns for a `failed` unit. Written through `unit
   set`/`unit get --unit <u>`, same `set_record` machinery as the change
   file.
 - **Scheduler**: `units next` — the units whose deps are all `merged` and

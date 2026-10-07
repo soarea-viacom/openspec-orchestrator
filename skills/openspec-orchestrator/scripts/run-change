@@ -44,7 +44,7 @@ usage: run-change <command> [args]
   initiative init|get|set --store <slug> --name <initiative> [key value ...]
   initiative merged --store <slug> --name <initiative> --child <change> --commit <sha>
   session append --store <slug> --name <change> key value [key value ...]
-  advisor request --store <slug> --name <change> --worker <transcript-id>
+  advisor request --store <slug> --name <change> --worker <transcript-id> [--unit <u>]
   session list   --store <slug> --name <change>
   status         --store <slug>
   next           --store <slug> --name <change>
@@ -439,6 +439,12 @@ cmd_unit_set() {
   kv_args "$@"
   local i
   for ((i = 0; i + 1 < ${#PAIRS[@]}; i += 2)); do
+    if [ "${PAIRS[$i]}" = fail_reason ]; then
+      case "${PAIRS[$((i + 1))]}" in
+        spec|iteration-cap|red-after-advice|merge-conflict|"") ;;
+        *) echo "unknown fail_reason '${PAIRS[$((i + 1))]}' (expected spec|iteration-cap|red-after-advice|merge-conflict)" >&2; return 1 ;;
+      esac
+    fi
     [ "${PAIRS[$i]}" = critique ] || continue
     local f="$(state_root "$STORE")/$NAME.yaml"
     local ui_units_v; ui_units_v="$(state_field "$f" ui_units)"
@@ -483,7 +489,16 @@ cmd_unit_iterate() {
   local n=$((iterations + 1))
   if [ "$n" -gt "$UNIT_ITER_CAP" ]; then
     state_write "$uf" status failed
+    state_write "$uf" fail_reason iteration-cap
     echo "unit $UNIT: iteration cap ($UNIT_ITER_CAP) reached" >&2
+    return 1
+  fi
+  # Two consecutive reds mean the worker is stuck, not unlucky: the next
+  # iterate is refused until the advisor has been asked for this unit.
+  local reds; reds="$(state_field "$uf" reds_in_row)"; reds="${reds:-0}"
+  local advised; advised="$(state_field "$uf" advised)"
+  if [ "$reds" -ge "$REDS_BEFORE_ADVISOR" ] && [ -z "$advised" ]; then
+    echo "refusing: unit $UNIT is red $reds times in a row — advisor required first: scripts/run-change advisor request --store $STORE --name $NAME --unit $UNIT --worker <transcript-id>, apply the answer, then iterate" >&2
     return 1
   fi
   local gcmd; gcmd="$(gate_command "$STORE" quick)"
@@ -512,8 +527,21 @@ cmd_unit_iterate() {
   [ -f "$shot" ] && state_write "$uf" screenshot "$shot"
   if [ "$result" = green ]; then
     state_write "$uf" status green
-  elif [ "$n" -eq "$UNIT_ITER_CAP" ]; then
-    state_write "$uf" status failed
+    state_write "$uf" reds_in_row 0
+  else
+    reds=$((reds + 1)); state_write "$uf" reds_in_row "$reds"
+    if [ -n "$advised" ]; then
+      # Red after the advisor's answer was applied: the human decides now,
+      # not at the cap.
+      state_write "$uf" status failed
+      state_write "$uf" fail_reason red-after-advice
+      echo "unit $UNIT: red after the advisor's answer (iteration $n) — escalating to Gate 1" >&2
+    elif [ "$n" -eq "$UNIT_ITER_CAP" ]; then
+      state_write "$uf" status failed
+      state_write "$uf" fail_reason iteration-cap
+    elif [ "$reds" -ge "$REDS_BEFORE_ADVISOR" ]; then
+      echo "unit $UNIT: red $reds times in a row — advisor required before the next iterate" >&2
+    fi
   fi
   [ "$result" = green ]
 }
@@ -841,7 +869,15 @@ cmd_advisor_request() {
     return 1
   fi
   local model; model="$(model_for_tier "$STORE" deep)"
-  session_append "$(session_log_path "$STORE" "$NAME")" role advisor tier deep model "$model" for "$WORKER"
+  if [ -n "$UNIT" ]; then
+    local uf; uf="$(unit_state_dir "$STORE" "$NAME")/$UNIT.yaml"
+    [ -f "$uf" ] || { echo "no unit $UNIT for change $NAME" >&2; return 1; }
+    local it; it="$(state_field "$uf" iterations)"; it="${it:-0}"
+    state_write "$uf" advised "$it"
+    session_append "$(session_log_path "$STORE" "$NAME")" role advisor tier deep model "$model" for "$WORKER" unit "$UNIT"
+  else
+    session_append "$(session_log_path "$STORE" "$NAME")" role advisor tier deep model "$model" for "$WORKER"
+  fi
   echo "$model"
 }
 

@@ -630,6 +630,24 @@ never another unit's transcript.
   is refused and the unit is marked `failed`. The worker never asserts its
   own result; the recorded `checks` value always comes from a command the
   engine ran.
+- **Escalation is by evidence, not by count.** A first red is the loop
+  working. Two consecutive reds (`REDS_BEFORE_ADVISOR`) mean the worker is
+  stuck: `unit iterate` refuses a third run until `advisor request --unit
+  <u>` has been made for this unit (the engine records `advised` on the
+  unit file; the worker's one advisor call per task is unchanged). Red
+  again after the answer is applied → the engine marks the unit `failed`
+  with `fail_reason red-after-advice` and `next` returns `gate1` carrying
+  the red output, the advisor's answer and the failing check — the human
+  gets something to decide on, after three iterations and one expert read,
+  not after five blind tries. Measured: of 11 red iterations across three
+  runs, 6 went green on the next try unaided and the rest went green only
+  after advice or a human answer; none went green on a third unaided try.
+  A check that **contradicts the spec** is not the worker's to fight: at
+  the first such red it runs `unit set --unit <u> status failed
+  fail_reason spec`, names the requirement and the contradiction in its
+  report, and returns; `next` returns `gate1` at once — the human owns the
+  spec, and five iterations against a requirement the code cannot meet
+  would be the code arguing with the proposal.
   Every gate the engine runs — `unit iterate`, `gate run`, the trunk
   preflight — is killed with its whole process group after
   `orchestration.gate_timeout` seconds (default 1800) and reported red,
@@ -1172,7 +1190,10 @@ one when the hard part isn't rare:
 - **One advisor call per worker task.** A second request from the same
   worker is refused: the task is not routine — return, and the
   orchestrator re-dispatches the whole task one tier up, as with a failed
-  self-check.
+  self-check. For a unit worker the call is also **required** at the
+  second consecutive red (`--unit <u>` records it on the unit file and
+  `unit iterate` refuses to run again without it — **Unit workers**); a
+  red after the answer goes to Gate 1, not back to the loop.
 - **Two advisor calls per change** across all its workers — `status` shows
   the count against the cap in its `ADVISOR` column, read from the
   session log. A third request is refused: the change was mis-tiered at

@@ -196,6 +196,8 @@ critic:non-canonical term
 verifier:never the generator'"'"'s transcript
 worker:`git add -- <files>`, never `-A`
 worker:unit iterate
+worker:advisor request --unit <u>
+worker:fail_reason spec
 unit-critic:never the generator'"'"'s transcript
 unit-critic:screenshot'
 anchor_n() { # anchor_n <anchor> <text> -> occurrences; seam as a whole word, not the <seam> placeholder
@@ -1009,28 +1011,60 @@ iwt="$($RC unit create --store storeu1 --project "$UPROJECT1" --name feat-iter -
 echo check > "$iwt/a.test.js"; git -C "$iwt" add -A && git -C "$iwt" commit -qm checks
 $RC unit checks-done --store storeu1 --project "$UPROJECT1" --name feat-iter --unit a
 
-for i in 1 2 3 4; do
-  check "unit iterate #$i returns red (no OK file yet)" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a >/dev/null 2>&1"
-done
+# escalation by evidence: red, red -> advisor required; red after advice -> failed to Gate 1
+check "unit iterate #1 returns red (no OK file yet)" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a >/dev/null 2>&1"
+check_out "first red records reds_in_row 1" "reds_in_row: 1" $RC unit get --store storeu1 --name feat-iter --unit a
+check_out "unit iterate #2 returns red and demands the advisor" "advisor required" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a 2>&1; true"
+check_out "second red records reds_in_row 2" "reds_in_row: 2" $RC unit get --store storeu1 --name feat-iter --unit a
+nlines_before="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -d ' ')"
+check_out "third iterate is refused until the advisor is asked" "advisor required first" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a 2>&1; true"
+nlines_after="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -d ' ')"
+check "refused iterate logs nothing" test "$nlines_before" = "$nlines_after"
+check_out "unit still running while waiting on the advisor" "status: running" $RC unit get --store storeu1 --name feat-iter --unit a
+check_out "advisor request --unit grants and prints the deep model" "claude-opus-5" $RC advisor request --store storeu1 --name feat-iter --unit a --worker iter-w1
+check_out "advisor request --unit records advised at the current iteration" "advised: 2" $RC unit get --store storeu1 --name feat-iter --unit a
+check_out "advisor entry names the unit" "role=advisor tier=deep model=claude-opus-5 for=iter-w1 unit=a" $RC session list --store storeu1 --name feat-iter
+check "advisor request --unit on an unknown unit is refused" bash -c "! $RC advisor request --store storeu1 --name feat-iter --unit zz --worker w9 >/dev/null 2>&1"
+check_out "iterate after advice, still red -> escalates" "escalating to Gate 1" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a 2>&1; true"
+check_out "unit failed with fail_reason red-after-advice" "fail_reason: red-after-advice" $RC unit get --store storeu1 --name feat-iter --unit a
+check_out "unit status failed before the cap" "status: failed" $RC unit get --store storeu1 --name feat-iter --unit a
 n_red="$($RC session list --store storeu1 --name feat-iter | grep -c 'checks=red')"
-check "exactly 4 red iterate entries logged" test "$n_red" = 4
-touch "$iwt/OK"
-check "5th iterate returns green" $RC unit iterate --store storeu1 --project "$UPROJECT1" --name feat-iter --unit a
-check_out "unit status is green" "status: green" $RC unit get --store storeu1 --name feat-iter --unit a
-check_out "screenshot recorded as the absolute iteration-5 path" "$TMP/storeu1/.orchestration/state/feat-iter.units/a/screenshot-5.png" $RC unit get --store storeu1 --name feat-iter --unit a
-check "recorded screenshot file exists" test -f "$TMP/storeu1/.orchestration/state/feat-iter.units/a/screenshot-5.png"
-n_green="$($RC session list --store storeu1 --name feat-iter | grep -c 'checks=green')"
-check "exactly 1 green iterate entry logged" test "$n_green" = 1
-iters_log="$($RC session list --store storeu1 --name feat-iter | grep -o 'iteration=[0-9]*' | sort -u | tr '\n' ' ')"
-check "iterations 1..5 all logged, once each" test "$iters_log" = "iteration=1 iteration=2 iteration=3 iteration=4 iteration=5 "
+check "exactly 3 red iterate entries logged" test "$n_red" = 3
 check_out "iterate entries carry tier standard" "tier=standard" $RC session list --store storeu1 --name feat-iter
 check_out "unit create records the leaf's tier" "tier: standard" $RC unit get --store storeu1 --name feat-iter --unit a
+$RC state set --store storeu1 --name feat-iter phase applying
+check_out "next: red-after-advice unit -> gate1 with the advisor's answer" "still red after the advisor's answer" $RC next --store storeu1 --name feat-iter
+
+# a green resets the streak; the cap stays the ceiling for alternating runs
+$RC state set --store storeu1 --name feat-iter units "a=a.js;c=c.js" seams "s=a.js,c.js" phase proposed
+cwt="$($RC unit create --store storeu1 --project "$UPROJECT1" --name feat-iter --unit c)"
+echo check > "$cwt/c.test.js"; git -C "$cwt" add -A && git -C "$cwt" commit -qm checks
+$RC unit checks-done --store storeu1 --project "$UPROJECT1" --name feat-iter --unit c
+check "c #1 red" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit c >/dev/null 2>&1"
+touch "$cwt/OK"
+check "c #2 green" $RC unit iterate --store storeu1 --project "$UPROJECT1" --name feat-iter --unit c
+check_out "a green resets reds_in_row" "reds_in_row: 0" $RC unit get --store storeu1 --name feat-iter --unit c
+check_out "screenshot recorded as the absolute iteration-2 path" "$TMP/storeu1/.orchestration/state/feat-iter.units/c/screenshot-2.png" $RC unit get --store storeu1 --name feat-iter --unit c
+rm "$cwt/OK"
+check "c #3 red (streak restarts at 1)" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit c >/dev/null 2>&1"
+touch "$cwt/OK"
+check "c #4 green" $RC unit iterate --store storeu1 --project "$UPROJECT1" --name feat-iter --unit c
+rm "$cwt/OK"
+check "c #5 red hits the cap" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit c >/dev/null 2>&1"
+check_out "cap failure records fail_reason iteration-cap" "fail_reason: iteration-cap" $RC unit get --store storeu1 --name feat-iter --unit c
 nlines_before="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -d ' ')"
-check "6th iterate is refused" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a >/dev/null 2>&1"
-check_out "6th iterate names the iteration cap" "iteration cap" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a 2>&1; true"
+check "6th iterate is refused" bash -c "! $RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit c >/dev/null 2>&1"
+check_out "6th iterate names the iteration cap" "iteration cap" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit c 2>&1; true"
 nlines_after="$($RC session list --store storeu1 --name feat-iter | wc -l | tr -d ' ')"
 check "6th iterate appends no log entry" test "$nlines_before" = "$nlines_after"
-check_out "unit status is failed past the cap" "status: failed" $RC unit get --store storeu1 --name feat-iter --unit a
+check_out "unit status is failed past the cap" "status: failed" $RC unit get --store storeu1 --name feat-iter --unit c
+
+# spec contradiction: the worker fails the unit itself, next gates at once
+check_out "unit set refuses an unknown fail_reason" "unknown fail_reason" bash -c "$RC unit set --store storeu1 --name feat-iter --unit c fail_reason tired 2>&1; true"
+printf 'status: running\ntier: standard\niterations: 1\ncritique: ""\n' > "$TMP/storeu1/.orchestration/state/feat-iter.units/a.yaml"
+check "unit set accepts fail_reason spec" $RC unit set --store storeu1 --name feat-iter --unit a status failed fail_reason spec
+$RC state set --store storeu1 --name feat-iter phase applying
+check_out "next: spec-contradiction unit -> gate1 naming the spec" "contradicts the spec" $RC next --store storeu1 --name feat-iter
 
 # gate_ui: runs after gate_quick for UI units only
 mkdir -p "$TMP/storeui/openspec"
@@ -1075,10 +1109,13 @@ $RC workspace create --store storeu1 --project "$UPROJECT1B" --name feat-iter-re
 rwt="$($RC unit create --store storeu1 --project "$UPROJECT1B" --name feat-iter-red --unit b)"
 echo check > "$rwt/b.test.js"; git -C "$rwt" add -A && git -C "$rwt" commit -qm checks
 $RC unit checks-done --store storeu1 --project "$UPROJECT1B" --name feat-iter-red --unit b
-for i in 1 2 3 4 5; do
+for i in 1 2; do
   $RC unit iterate --store storeu1 --project "$UPROJECT1B" --name feat-iter-red --unit b >/dev/null 2>&1 || true
 done
-check_out "non-UI unit red at the cap -> failed" "status: failed" $RC unit get --store storeu1 --name feat-iter-red --unit b
+$RC advisor request --store storeu1 --name feat-iter-red --unit b --worker red-w1 >/dev/null
+$RC unit iterate --store storeu1 --project "$UPROJECT1B" --name feat-iter-red --unit b >/dev/null 2>&1 || true
+check_out "non-UI unit red after advice -> failed" "status: failed" $RC unit get --store storeu1 --name feat-iter-red --unit b
+check_out "non-UI unit failed on the third iteration, not the fifth" "iterations: 3" $RC unit get --store storeu1 --name feat-iter-red --unit b
 
 # unit-revise round trip (V2): blocking critique -> orchestrator clears it
 # (status running, critique "") -> iterate green again -> unit-critique

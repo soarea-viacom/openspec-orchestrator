@@ -3,6 +3,8 @@ Work only in the worktree and on the branch you were given; write only the files
 A file you need outside your file list is a mid-run finding to report, not a silent edit.
 Checks first: write the tests that encode your tasks, commit only them, then run `unit checks-done`.
 Then implement and run `unit iterate`; it runs the gate and records green or red. Cap 5 iterations.
+Red twice in a row on the same check: `advisor request --unit <u> --worker <your id>` is required before the next iterate; apply the answer, then iterate. Red again after that answer: the engine marks the unit failed and the human decides — return, do not keep iterating.
+A check that contradicts the spec is not yours to fight: at the first such red run `unit set --unit <u> status failed fail_reason spec`, name the requirement and the contradiction in your report, and return.
 Never claim green yourself: quote the `unit iterate` output verbatim.
 Commit each green iteration with `git add -- <files>`, never `-A`, and the trailers your dispatch names.
 Never edit tasks.md. Never push, rebase, merge, checkout, or reset.

@@ -444,6 +444,11 @@ parallel_mode() {
 }
 
 UNIT_ITER_CAP=5
+# Consecutive red iterations after which `unit iterate` refuses to run
+# again until the advisor has been asked for the unit. Measured: a worker
+# that is red twice on the same check does not fix it alone on the third
+# try; it fixes it on the fifth, or never.
+REDS_BEFORE_ADVISOR=2
 
 # --- map dialect: "<k>=<a>,<b>;<k>=<c>" shared by seams/units/unit_deps/
 # unit_tasks. Nothing outside these two functions parses that dialect.
@@ -1058,7 +1063,14 @@ next_action_applying() {
   # a unit failed -> gate1
   for u in $unit_list; do
     [ "$(_na_status "$u")" = failed ] || continue
-    _na_emit gate1 none - "unit $u failed (iteration cap reached, or an unrecoverable merge conflict)"
+    local why; why="$(state_field "$udir/$u.yaml" fail_reason)"
+    case "$why" in
+      spec) _na_emit gate1 none - "unit $u reports a check that contradicts the spec (fail_reason spec): the human owns the spec — show the worker's finding and the requirement it names; amend the spec (spec_amend accepted) or redraft" ;;
+      red-after-advice) _na_emit gate1 none - "unit $u is still red after the advisor's answer (fail_reason red-after-advice): show the human the red iterate output, the advisor's answer, and the failing check" ;;
+      iteration-cap) _na_emit gate1 none - "unit $u hit the iteration cap ($UNIT_ITER_CAP)" ;;
+      merge-conflict) _na_emit gate1 none - "unit $u had an unrecoverable merge conflict" ;;
+      *) _na_emit gate1 none - "unit $u failed (iteration cap reached, or an unrecoverable merge conflict)" ;;
+    esac
     printf 'running: %s\n' "$running_line"
     return 0
   done
