@@ -795,9 +795,11 @@ record when the step completes, and the `reason` (which rule fired) — from
 the change's state file and session log alone. On `check` it adds `also:
 verify` and `also_model: <id>`: a second, read-only step to dispatch
 concurrently with the first, never a replacement for it. On a role-bearing
-action `next` also prints `prompt: <path>` right after `reason:` (and
-`also_prompt: <path>` right after `also_model:` on `check`) — the engine
-prompt for that role; see **Role overlays** above. Actions: `classify`,
+action `next` also prints `prompt: <path>` right after `reason:`, then any
+`overlay:`, then `agent: openspec-<role>` (and `also_prompt:` /
+`also_overlay:` / `also_agent:` after `also_model:` on `check`) — the
+engine prompt for that role and the agent definition to dispatch it as
+(`subagent_type`); see **Role agents** and **Role overlays** above. Actions: `classify`,
 `grill` (tier `none` — the orchestrator runs the interview itself),
 `propose`, `critique`, `revise`, `gate0`, `apply` (tier `none` — bookkeeping only, no
 worker dispatched), `split`, `unit-spawn`, `unit-critique`, `unit-revise`,
@@ -1118,6 +1120,28 @@ the one check this engine can vouch for itself), and it never checks whether a m
 skill is safe to run unattended — if a project maps a skill that stops to interview a
 human, the change simply stalls in that phase, visible the same way any other broken step
 is, not something this engine detects in advance.
+
+### Role agents (effort and tools per role, shipped beside the skill)
+
+Each role is also a Claude Code agent definition, `agents/openspec-<role>/AGENT.md`
+in this repository and installed by Atlas as `openspec-proposer`,
+`openspec-critic`, `openspec-verifier`, `openspec-unit-critic`,
+`openspec-worker`. The body is the role prompt verbatim (`tools/build-agents.sh`
+regenerates it; a test fails on drift). The frontmatter adds the two things
+a prompt cannot carry: **effort** — `high` for the proposer, the critic and
+Verify, whose errors cost the most downstream and whose thinking share
+was already the highest at `medium` (measured: 44% for the critic);
+`medium` for unit critics and workers, whose cost is turns, not thinking —
+and a **tool allowlist**: checkers get no `Edit`, nobody gets `Agent`
+(the orchestrator owns dispatch). The model is not in the file: `next`
+prints `agent:` beside `model:`, and the orchestrator passes both on the
+Agent call, so one definition serves every tier. Effort is not settable
+per call any other way; this is the host's only lever for it. When the
+agent is not installed (Step 0 offers to install it), dispatch a general
+agent with the prompt text instead — same instructions, session effort.
+This is also what makes **same model, different configuration** real for
+a checker: a store that sets `orchestration.checker_effort` can run Verify
+on the implementer's model at `high` through its agent definition.
 
 ### Role overlays (project notes for a role, kept in the store)
 

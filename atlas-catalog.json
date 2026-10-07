@@ -3,11 +3,54 @@
     "openspec-orchestrator": {
       "description": "Spec-driven development workflow (propose a delta spec before touching code, implement against the approved proposal with tests, archive into the living spec). Routes OpenSpec artifacts to whichever root fits the project — an already-existing local openspec/ folder (used as-is, always takes priority), or an external store when there is no local folder, asking the user which to use for a project that has neither. When routed externally, the target project's directory and git history are otherwise untouched by OpenSpec. Always runs autonomously through Propose/Apply/Archive, but always pauses once per proposal round — before any code is written — for the human to accept a short resume of what is about to be implemented (or ask for the full proposal, or request changes, which redrafts and shows a new resume); beyond that mandatory pause it asks the human only when something is wrong, and there is no other step-by-step mode. Use when the user wants to add/change a feature under spec control, wants to grill a plan before a change (grill mode — weigh approaches, then sharpen terms and decisions into the Project glossary and ADRs), or asks to orchestrate/route OpenSpec locally or to an external store.",
       "path": "skills/openspec-orchestrator",
-      "teams": ["*"],
+      "teams": [
+        "*"
+      ],
       "required": false
     }
   },
-  "agents": {},
+  "agents": {
+    "openspec-proposer": {
+      "description": "Propose: drafts the delta spec, seam list and Guardrails at the tier model passed on dispatch. Dispatched by the openspec-orchestrator engine; effort and tools fixed here, model from the tier table.",
+      "path": "agents/openspec-proposer/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic": {
+      "description": "Proposal critic: fresh read of a draft proposal against the request, glossary and ADRs; blocking/warning/request. Dispatched by the openspec-orchestrator engine; effort and tools fixed here, model from the tier table.",
+      "path": "agents/openspec-critic/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier": {
+      "description": "Verify: grades the committed change against the proposal and its Guardrails; clean/warnings/blocking/spec. Dispatched by the openspec-orchestrator engine; effort and tools fixed here, model from the tier table.",
+      "path": "agents/openspec-verifier/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic": {
+      "description": "Unit critic: fresh read of one green unit (checks first, then code, then screenshot). Dispatched by the openspec-orchestrator engine; effort and tools fixed here, model from the tier table.",
+      "path": "agents/openspec-unit-critic/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker": {
+      "description": "Worker: unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list. Dispatched by the openspec-orchestrator engine; effort and tools fixed here, model from the tier table.",
+      "path": "agents/openspec-worker/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    }
+  },
   "mcpServers": {},
   "hooks": {}
 }

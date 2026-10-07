@@ -1044,6 +1044,12 @@ pillars_trivial() {
 # emit_role_lines <slug> <action> -> for a role-bearing action prints
 # `prompt: <path>`, then `overlay: <path>` when the store has an overlay
 # for that role.
+# role_agent <role> -> the Claude Code agent definition the orchestrator
+# dispatches this role as (`subagent_type`), installed by Atlas beside the
+# skill. It carries the role's effort and tool allowlist; the model still
+# comes from the tier table, passed on the Agent call.
+role_agent() { echo "openspec-$1"; }
+
 emit_role_lines() {
   local r; r="$(role_for_action "$2")"
   [ -n "$r" ] || return 0
@@ -1051,6 +1057,7 @@ emit_role_lines() {
   printf 'prompt: %s\n' "$p"
   local ov; ov="$(role_overlay "$1" "$r")"
   [ -n "$ov" ] && printf 'overlay: %s\n' "$ov"
+  printf 'agent: %s\n' "$(role_agent "$r")"
   return 0
 }
 
@@ -1357,6 +1364,7 @@ next_action() {
           printf 'also_prompt: %s\n' "$vp"
           local vov; vov="$(role_overlay "$slug" verifier)"
           [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
+          printf 'also_agent: %s\n' "$(role_agent verifier)"
           emit_effort ;;
         red)
           if [ "$verify" = spec ] && [ "$spec_amend" = accepted ]; then

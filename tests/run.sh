@@ -223,6 +223,25 @@ while IFS=: read -r role s; do
   check "role prompt $role quotes: $s" grep -qF -- "$s" "$SKILL/scripts/roles/$role.md"
 done <<<"$ROLE_INVARIANTS"
 
+# role agents: agents/openspec-<role>/AGENT.md = frontmatter + the role prompt verbatim
+AGENT_EFFORT='proposer:high
+critic:high
+verifier:high
+unit-critic:medium
+worker:medium'
+while IFS=: read -r role eff; do
+  af="agents/openspec-$role/AGENT.md"
+  check "agent file exists for $role" test -f "$af"
+  check "agent $role names itself openspec-$role" grep -qx "name: openspec-$role" "$af"
+  check "agent $role runs at effort $eff" grep -qx "effort: $eff" "$af"
+  check "agent $role body is the role prompt verbatim" bash -c "diff <(awk 'c>=2{print} /^---$/{c++}' '$af') '$SKILL/scripts/roles/$role.md'"
+  check "agent $role grants no Agent tool" bash -c "! grep -E '^tools:.*\bAgent\b' '$af'"
+done <<<"$AGENT_EFFORT"
+for role in critic verifier unit-critic; do
+  check "checker agent $role has no Edit tool" bash -c "! grep -E '^tools:.*\bEdit\b' agents/openspec-$role/AGENT.md"
+done
+check "catalog lists the five role agents" bash -c "[ \$(python3 -c \"import json;print(len(json.load(open('atlas-catalog.json'))['agents']))\") -eq 5 ]"
+
 # role overlays: <store>/openspec/roles/<role>.md, text printed verbatim
 check_out "roles get with no overlay prints nothing" "" $RC roles get --store teststore --role critic
 check "roles get with no overlay exits 0" $RC roles get --store teststore --role critic
@@ -382,6 +401,7 @@ check_out "next: fresh change -> classify first" "action: classify" $N
 check_out "next: classify runs at standard" "tier: standard" $N
 check_out "next: classify names the pillar vocabulary" "scope=file|seam|seams;blast=none|project|public;novelty=known|new;deps=none|dev|runtime" $N
 check_line "next: classify prints the proposer prompt" "prompt: $PWD/$SKILL/scripts/roles/proposer.md" $N
+check_line "next: classify names the proposer agent" "agent: openspec-proposer" $N
 $RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=huge;deps=none"
 check_out "next: unknown pillar value is refused" "unknown novelty 'huge'" bash -c "$N 2>&1; true"
 $RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=known"
@@ -413,6 +433,7 @@ check_out "next: draft exists -> critique" "action: critique" $N
 check_out "next: critique of a deep draft runs at max" "tier: max" $N
 check_out "next: critique names the store's critic overlay" "overlay: $STORE/openspec/roles/critic.md" $N
 check_line "next: critique prints the engine critic prompt" "prompt: $PWD/$SKILL/scripts/roles/critic.md" $N
+check_line "next: critique names the critic agent" "agent: openspec-critic" $N
 out_cr="$($N)"
 cr_reason="$(line_of reason: "$out_cr")"; cr_prompt="$(line_of prompt: "$out_cr")"; cr_ov="$(line_of overlay: "$out_cr")"
 check "next: critique prompt: is the line right after reason:" test "${cr_prompt:-x}" = "$(( ${cr_reason:-0} + 1 ))"
@@ -468,6 +489,7 @@ check_out "next: concurrent verify gets the distinct-model id" "also_model: clau
 out_chk="$($N)"
 case "$out_chk" in *"also_overlay:"*) echo "FAIL next: check prints no also_overlay without a verifier overlay"; fails=$((fails+1)) ;; *) echo "ok   next: check prints no also_overlay without a verifier overlay" ;; esac
 check_line "next: check prints the engine verifier prompt for the concurrent Verify" "also_prompt: $PWD/$SKILL/scripts/roles/verifier.md" $N
+check_line "next: check names the verifier agent for the concurrent Verify" "also_agent: openspec-verifier" $N
 chk_model="$(line_of also_model: "$out_chk")"; chk_prompt="$(line_of also_prompt: "$out_chk")"
 check "next: check also_prompt: is the line right after also_model:" test "${chk_prompt:-x}" = "$(( ${chk_model:-0} + 1 ))"
 printf 'Verify the bump in releases.json matches the SKILL.md change.\n' > "$STORE/openspec/roles/verifier.md"
