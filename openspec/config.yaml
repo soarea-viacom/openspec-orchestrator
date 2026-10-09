@@ -14,8 +14,9 @@ context: |
   SKILL.md, AUTONOMOUS-ORCHESTRATION.md, CONTEXT.md, scripts/ (run-change,
   lib.sh, roles/) and releases.json — Atlas copies that directory whole, so
   nothing the engine needs at run time may live outside it. tests/, openspec/,
-  docs/ and README.md stay at the repo root and are not installed. Tests are tests/run.sh (check/check_out/check_line
-  helpers, a no-caller function scan as the dead-code pass). Every change to
+  docs/ and README.md stay at the repo root and are not installed. Tests are tests/run.sh, which runs the
+  independent tests/t-*.sh files in parallel (helpers in tests/lib.sh; the
+  no-caller function scan in t-00-static.sh is the dead-code pass). Every change to
   SKILL.md or AUTONOMOUS-ORCHESTRATION.md bumps releases.json via
   `atlas bump skill openspec-orchestrator --minor -m "..."`, never by hand;
   one bump per change. Comments state non-obvious rationale only. A change

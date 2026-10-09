@@ -100,7 +100,7 @@ flowchart TD
 | [`scripts/roles/`](skills/openspec-orchestrator/scripts/roles/) | Literal dispatch text per engine role (proposer, critic, worker, unit-critic, verifier). |
 | [`CONTEXT.md`](skills/openspec-orchestrator/CONTEXT.md) | Domain glossary: Store, Change, Worker, Advisor, Blackboard, Seam list, etc. Distinct from a target project's own Project glossary, which grill mode writes to `<root>/openspec/CONTEXT.md`. |
 | [`releases.json`](skills/openspec-orchestrator/releases.json) | Version history read by Atlas; written by `atlas bump`, never by hand. |
-| [`tests/run.sh`](tests/run.sh) | Black-box tests for `run-change`, via its CLI only. Not installed. |
+| [`tests/run.sh`](tests/run.sh) | Black-box tests for `run-change`, via its CLI only. Runs the self-contained `tests/t-*.sh` files in parallel; fixtures and assertions in `tests/lib.sh`. Not installed. |
 | [`docs/proposals/`](docs/proposals/) | Design records for engine extensions. Adopted proposals reference where they landed; others are marked as sketches. |
 | `openspec/`, `.openspec-store/` | This repository's own OpenSpec scaffold, used to develop the skill under its own discipline. Not required by a target project. |
 

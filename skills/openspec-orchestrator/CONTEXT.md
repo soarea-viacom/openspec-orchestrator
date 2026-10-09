@@ -193,7 +193,7 @@
   slower belongs in `gate_full`, which runs once per Check. The full gate
   includes the project's dead-code pass (`knip`, `vulture`, or
   equivalent); for this engine that is the no-caller function scan in
-  `tests/run.sh`.
+  `tests/t-00-static.sh`.
 - **Trunk preflight**: `scripts/run-change gate run --store <slug>
   --project <path> --mode full --trunk` — runs `gate_full` in a temporary
   detached worktree of the trunk ref, writes no state, and removes the
