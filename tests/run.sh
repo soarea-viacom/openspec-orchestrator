@@ -280,7 +280,7 @@ check_out "model verify with no history assumes a standard implementer -> deep" 
 $RC session append --store teststore --name feat-verify role worker phase applying tier standard model claude-sonnet-5 transcript_id t1
 check_out "model verify picks the tier above the implementer" "claude-opus-5-custom" $RC model verify --store teststore --name feat-verify
 check_out "model verify contract names the store/name/seams field" "--store teststore --name feat-verify, field seams" $RC model verify --store teststore --name feat-verify
-check_out "model verify first line is the bare model id" "claude-opus-5-custom" bash -c "$RC model verify --store teststore --name feat-verify | head -n1"
+check_out "model verify first line is the bare model id" "claude-opus-5-custom" bash -c "$RC model verify --store teststore --name feat-verify | sed -n 1p"
 check_out "model verify contract mentions input and seam" "input:" $RC model verify --store teststore --name feat-verify
 check_out "model verify contract names the store config as an input" "$STORE/openspec/config.yaml" $RC model verify --store teststore --name feat-verify
 check_out "model verify contract makes a stale config a warning" "else one warning finding" $RC model verify --store teststore --name feat-verify
@@ -314,7 +314,7 @@ check_out "model critic for a max proposer drops to deep, the second highest" "c
 $RC session append --store teststore --name feat-critic role worker phase proposed tier max model claude-opus-5-custom transcript_id t5
 check_out "model critic errors when deep resolves to a max proposer's model" "resolves to the proposer's own model" bash -c "$RC model critic --store teststore --name feat-critic 2>&1; true"
 $RC session append --store teststore --name feat-critic role worker phase proposed tier standard model claude-sonnet-5 transcript_id t6
-check_out "model critic first line is the bare model id" "claude-opus-5-custom" bash -c "$RC model critic --store teststore --name feat-critic | head -n1"
+check_out "model critic first line is the bare model id" "claude-opus-5-custom" bash -c "$RC model critic --store teststore --name feat-critic | sed -n 1p"
 check_out "model critic contract mentions input and seam" "input:" $RC model critic --store teststore --name feat-critic
 check_out "model critic contract names the store/name/seams field" "--store teststore --name feat-critic, field seams" $RC model critic --store teststore --name feat-critic
 out_cg="$($RC model critic --store teststore --name feat-critic 2>/dev/null || true)"
@@ -1762,9 +1762,9 @@ esac
 # editor would look (AUTONOMOUS-ORCHESTRATION.md, CONTEXT.md, config.yaml,
 # SKILL.md) — see specs/role-prompts/spec.md "Style split documented"
 # =====================================================================
-hr_line="$(grep -n '^## Hard rule: written for agents' $SKILL/AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
-ro_line="$(grep -n '^### Role overlays' $SKILL/AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
-fr_line="$(grep -n '^### Fix rounds' $SKILL/AUTONOMOUS-ORCHESTRATION.md | head -1 | cut -d: -f1)"
+hr_line="$(grep -n '^## Hard rule: written for agents' $SKILL/AUTONOMOUS-ORCHESTRATION.md | sed -n 1p | cut -d: -f1)"
+ro_line="$(grep -n '^### Role overlays' $SKILL/AUTONOMOUS-ORCHESTRATION.md | sed -n 1p | cut -d: -f1)"
+fr_line="$(grep -n '^### Fix rounds' $SKILL/AUTONOMOUS-ORCHESTRATION.md | sed -n 1p | cut -d: -f1)"
 hr_hit=""; ro_hit=""
 for n in $(grep -n 'scripts/roles' $SKILL/AUTONOMOUS-ORCHESTRATION.md | cut -d: -f1); do
   [ -n "$hr_line" ] && [ "$n" -gt "$hr_line" ] && hr_hit=1
@@ -1775,7 +1775,7 @@ check "$SKILL/AUTONOMOUS-ORCHESTRATION.md names scripts/roles in the Role overla
 
 check "$SKILL/CONTEXT.md defines Role prompt" bash -c "grep -qE -- '\*\*Role prompt\*\*' $SKILL/CONTEXT.md"
 check "$SKILL/CONTEXT.md defines Anchor" bash -c "grep -qE -- '\*\*Anchor\*\*' $SKILL/CONTEXT.md"
-anchor_start="$(grep -n -- '\*\*Anchor\*\*' $SKILL/CONTEXT.md | head -1 | cut -d: -f1)"
+anchor_start="$(grep -n -- '\*\*Anchor\*\*' $SKILL/CONTEXT.md | sed -n 1p | cut -d: -f1)"
 anchor_tmp="$TMP/anchor_entry.txt"
 awk -v s="${anchor_start:-0}" 'NR==s{print;started=1;next} started{ if (/^- \*\*/) exit; print }' $SKILL/CONTEXT.md > "$anchor_tmp"
 while IFS= read -r lit; do
@@ -1789,9 +1789,9 @@ turns, not tokens
 the engine records, the worker never asserts
 EOF_ANCHORS
 
-ctx_line="$(grep -n '^context:' openspec/config.yaml | head -1 | cut -d: -f1)"
+ctx_line="$(grep -n '^context:' openspec/config.yaml | sed -n 1p | cut -d: -f1)"
 next_key_line="$(awk -v s="${ctx_line:-0}" 'NR>s && /^[a-zA-Z_]+:/{print NR; exit}' openspec/config.yaml)"
-cfg_hit="$(grep -n 'scripts/roles/<role>.md' openspec/config.yaml | head -1 | cut -d: -f1)"
+cfg_hit="$(grep -n 'scripts/roles/<role>.md' openspec/config.yaml | sed -n 1p | cut -d: -f1)"
 check "openspec/config.yaml names scripts/roles/<role>.md inside the context: block" \
   bash -c "[ -n '${cfg_hit:-}' ] && [ -n '${ctx_line:-}' ] && [ -n '${next_key_line:-}' ] && [ '$cfg_hit' -gt '$ctx_line' ] && [ '$cfg_hit' -lt '$next_key_line' ]"
 
@@ -1805,7 +1805,7 @@ done
 check "SKILL.md has exactly one '## Grill mode' heading" bash -c "[ \$(grep -c '^## Grill mode$' $SKILL/SKILL.md) -eq 1 ]"
 check "SKILL.md has no grill-with-docs" bash -c "[ \$(grep -c 'grill-with-docs' $SKILL/SKILL.md) -eq 0 ]"
 
-gm_start="$({ grep -n '^## Grill mode$' $SKILL/SKILL.md || true; } | head -1 | cut -d: -f1)"
+gm_start="$({ grep -n '^## Grill mode$' $SKILL/SKILL.md || true; } | sed -n 1p | cut -d: -f1)"
 gm_tmp="$TMP/grill_mode_section.txt"
 awk -v s="${gm_start:-0}" 'NR==s{print;started=1;next} started{ if (/^## /) exit; print }' $SKILL/SKILL.md > "$gm_tmp"
 while IFS= read -r lit; do
@@ -1825,26 +1825,26 @@ sharpened request
 Gate 0
 EOF_GRILL
 
-ao_start="$({ grep -n '^## Autonomous only$' $SKILL/SKILL.md || true; } | head -1 | cut -d: -f1)"
+ao_start="$({ grep -n '^## Autonomous only$' $SKILL/SKILL.md || true; } | sed -n 1p | cut -d: -f1)"
 ao_tmp="$TMP/autonomous_only_section.txt"
 awk -v s="${ao_start:-0}" 'NR==s{print;started=1;next} started{ if (/^## /) exit; print }' $SKILL/SKILL.md > "$ao_tmp"
 check "SKILL.md Autonomous only section names grill mode" grep -qF -- "grill mode" "$ao_tmp"
 
-gr_start="$({ grep -n '^## Guardrails$' $SKILL/SKILL.md || true; } | head -1 | cut -d: -f1)"
+gr_start="$({ grep -n '^## Guardrails$' $SKILL/SKILL.md || true; } | sed -n 1p | cut -d: -f1)"
 gr_tmp="$TMP/guardrails_section.txt"
 awk -v s="${gr_start:-0}" 'NR>=s{print}' $SKILL/SKILL.md > "$gr_tmp"
 check "SKILL.md Guardrails section names Project glossary" grep -qF -- "Project glossary" "$gr_tmp"
 check "SKILL.md Guardrails section names grill mode" grep -qF -- "grill mode" "$gr_tmp"
 
-skill_desc="$(sed -n 's/^description: //p' $SKILL/SKILL.md | head -1)"
-catalog_desc="$(sed -n 's/.*"description": "\(.*\)",$/\1/p' atlas-catalog.json | head -1)"
+skill_desc="$(sed -n 's/^description: //p' $SKILL/SKILL.md | sed -n 1p)"
+catalog_desc="$(sed -n 's/.*"description": "\(.*\)",$/\1/p' atlas-catalog.json | sed -n 1p)"
 check "SKILL.md and atlas-catalog.json descriptions are identical" test "$skill_desc" = "$catalog_desc"
 case "$skill_desc" in
   *"grill mode"*) echo "ok   SKILL.md description names grill mode" ;;
   *) echo "FAIL SKILL.md description names grill mode"; fails=$((fails+1)) ;;
 esac
 
-desc_full="$({ grep '^description: ' $SKILL/SKILL.md || true; } | head -1)"
+desc_full="$({ grep '^description: ' $SKILL/SKILL.md || true; } | sed -n 1p)"
 colon_count="$(printf '%s\n' "$desc_full" | { grep -o ': ' || true; } | wc -l | tr -d ' ')"
 hash_count="$(printf '%s\n' "$desc_full" | { grep -o ' #' || true; } | wc -l | tr -d ' ')"
 check "SKILL.md description: line has exactly one ': '" test "$colon_count" = 1
@@ -1855,26 +1855,26 @@ check "CONTEXT.md defines Implied baseline" grep -qF -- '**Implied baseline**' $
 check "SKILL.md grill section never asks the obvious" grep -qF -- 'Never ask the obvious' $SKILL/SKILL.md
 check "AUTONOMOUS-ORCHESTRATION.md fidelity standard names the implied baseline" bash -c "grep -A4 -- '- \*\*Fidelity\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md | grep -q 'implied baseline'"
 check "CONTEXT.md defines Grill mode" grep -qF -- '**Grill mode**' $SKILL/CONTEXT.md
-cic_start="$({ grep -n -- '\*\*Checker input contract\*\*' $SKILL/CONTEXT.md || true; } | head -1 | cut -d: -f1)"
+cic_start="$({ grep -n -- '\*\*Checker input contract\*\*' $SKILL/CONTEXT.md || true; } | sed -n 1p | cut -d: -f1)"
 cic_tmp="$TMP/checker_input_contract.txt"
 awk -v s="${cic_start:-0}" 'NR==s{print;started=1;next} started{ if (/^- \*\*/) exit; print }' $SKILL/CONTEXT.md > "$cic_tmp"
 check "CONTEXT.md Checker input contract entry names Project glossary" grep -qF -- "Project glossary" "$cic_tmp"
 
-ctx2_line="$(grep -n '^context:' openspec/config.yaml | head -1 | cut -d: -f1)"
+ctx2_line="$(grep -n '^context:' openspec/config.yaml | sed -n 1p | cut -d: -f1)"
 ctx2_next="$(awk -v s="${ctx2_line:-0}" 'NR>s && /^[a-zA-Z_]+:/{print NR; exit}' openspec/config.yaml)"
-ctx2_hit="$({ grep -n 'openspec/CONTEXT.md' openspec/config.yaml || true; } | head -1 | cut -d: -f1)"
+ctx2_hit="$({ grep -n 'openspec/CONTEXT.md' openspec/config.yaml || true; } | sed -n 1p | cut -d: -f1)"
 check "openspec/config.yaml names openspec/CONTEXT.md inside the context: block" \
   bash -c "[ -n '${ctx2_hit:-}' ] && [ -n '${ctx2_line:-}' ] && [ -n '${ctx2_next:-}' ] && [ '$ctx2_hit' -gt '$ctx2_line' ] && [ '$ctx2_hit' -lt '$ctx2_next' ]"
 
 check "README names /openspec-orchestrator grill" grep -qF -- "/openspec-orchestrator grill" README.md
-readme_ctx_row="$({ grep -F '[`CONTEXT.md`]' README.md || true; } | head -1)"
+readme_ctx_row="$({ grep -F '[`CONTEXT.md`]' README.md || true; } | sed -n 1p)"
 case "$readme_ctx_row" in
   *"openspec/CONTEXT.md"*) echo "ok   README CONTEXT.md layout row names openspec/CONTEXT.md" ;;
   *) echo "FAIL README CONTEXT.md layout row names openspec/CONTEXT.md"; fails=$((fails+1)) ;;
 esac
 
-crit_start="$({ grep -n -- '\*\*Critique\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md || true; } | head -1 | cut -d: -f1)"
-crit_end="$({ grep -n -- 'The critic writes a \*\*critique report\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md || true; } | head -1 | cut -d: -f1)"
+crit_start="$({ grep -n -- '\*\*Critique\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md || true; } | sed -n 1p | cut -d: -f1)"
+crit_end="$({ grep -n -- 'The critic writes a \*\*critique report\*\*' $SKILL/AUTONOMOUS-ORCHESTRATION.md || true; } | sed -n 1p | cut -d: -f1)"
 crit_tmp="$TMP/critique_contract.txt"
 awk -v s="${crit_start:-0}" -v e="${crit_end:-0}" 'NR>=s && NR<=e' $SKILL/AUTONOMOUS-ORCHESTRATION.md > "$crit_tmp"
 check "AUTONOMOUS-ORCHESTRATION.md Critique input contract names openspec/CONTEXT.md" grep -qF -- "openspec/CONTEXT.md" "$crit_tmp"
