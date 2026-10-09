@@ -268,7 +268,7 @@
   terms and decisions into the Project glossary and ADRs; an external-mode
   guard compares `git status --porcelain` before and after; nothing is
   ever committed.
-- **Role agent**: the Claude Code agent definition for a role,
+- **Role agent**: the agent definition for a role,
   `openspec-<role>` (`agents/openspec-<role>/AGENT.md` here, installed by
   Atlas), body = the role prompt verbatim, frontmatter = effort (`high`
   proposer/critic/verifier, `medium` unit-critic/worker) and tool

@@ -2,10 +2,11 @@
 
 <img src="assets/logo.svg" alt="openspec-orchestrator logo" width="340">
 
-A [Claude Code](https://claude.com/claude-code) skill for spec-driven development on top
+An agent skill for spec-driven development on top
 of [OpenSpec](https://github.com/Fission-AI/OpenSpec): draft a delta spec, critique it,
 implement it, gate and verify it, archive it into the living spec. Execution is
-autonomous end to end, with two defined human checkpoints.
+autonomous end to end, with two defined human checkpoints. Runs on every agent tool
+Atlas installs into: Claude Code, Cursor, VS Code/Copilot, Codex, OpenCode.
 
 This repository is the engine, not a target project. Everything a consumer installs lives
 under `skills/openspec-orchestrator/`; the rest of the repo is tests, design records and
@@ -107,7 +108,9 @@ flowchart TD
 
 ### Prerequisites
 
-- [Claude Code](https://claude.com/claude-code).
+- An agent tool that loads `SKILL.md` skills, runs shell commands and dispatches
+  subagents: Claude Code, Cursor, VS Code/Copilot, Codex or OpenCode. Claude Desktop is
+  not supported (no shell, no agents).
 - The `openspec` CLI on `PATH`: `npm i -g openspec`. The skill installs/upgrades this
   globally when missing; never as a project dependency.
 - A target project must be a git repository. If it isn't, the skill runs `git init` and an
@@ -118,7 +121,8 @@ flowchart TD
 The skill is the directory `skills/openspec-orchestrator/`. `SKILL.md` and
 `AUTONOMOUS-ORCHESTRATION.md` invoke `scripts/run-change` relative to that directory and
 `scripts/lib.sh` locates its siblings the same way, so the directory must land whole
-wherever Claude Code loads skills from. Without Atlas:
+wherever your tool loads skills from (`~/.claude/skills/`, `~/.cursor/skills/`,
+`~/.copilot/skills/`, `~/.codex/skills/`). Without Atlas, for Claude Code:
 
 ```bash
 cp -R skills/openspec-orchestrator ~/.claude/skills/openspec-orchestrator
@@ -137,9 +141,11 @@ add this repo as a catalog and install the skill:
 
 ```bash
 atlas add-catalog https://github.com/soarea-viacom/openspec-orchestrator.git
-atlas install-skill openspec-orchestrator
-for r in proposer critic verifier unit-critic worker; do atlas install-agent openspec-$r -g; done
+atlas install-skill openspec-orchestrator -t claude-code,cursor
+for r in proposer critic verifier unit-critic worker; do atlas install-agent openspec-$r -g -t claude-code,cursor; done
 ```
+
+`-t` picks the tools (illustrative values above; omit it to install to every tool).
 
 The five agents carry each role's effort and tool allowlist (`agents/`); the skill's
 `next` names which one to dispatch. Agent definitions load when a session starts, so
@@ -242,6 +248,7 @@ orchestration:
   unit_max_files: 8                  # size cap per unit (default 8 files / 3 tasks)
   unit_max_tasks: 3
   gate_full: "npm test && npx knip"  # must include a dead-code pass
+  tool: claude-code                  # host agent tool: claude-code|cursor|copilot|codex|opencode
   model_mechanical: claude-haiku-4-5-20251001   # optional overrides
   model_standard: claude-sonnet-5
   model_deep: claude-opus-5
@@ -253,7 +260,9 @@ orchestration:
 ```
 
 `model_*` are optional; unset tiers fall back to the default tier→model table
-(`scripts/run-change model get`). `unit_concurrency` and `parallel` are optional too —
+(`scripts/run-change model get`). That table is Claude Code's: it is the only host that
+sets a model per subagent dispatch. With any other `tool`, unset tiers resolve to
+`session` and every role runs on the session model. `unit_concurrency` and `parallel` are optional too —
 `concurrency` defaults to 2, `unit_concurrency` to 3, and `parallel` to `true`; a change's
 own `parallel` state field overrides the store default. `stage_skills` is optional: `plan`
 accepts at most one skill and replaces the deep-tier drafter when set; `critic`/`test`

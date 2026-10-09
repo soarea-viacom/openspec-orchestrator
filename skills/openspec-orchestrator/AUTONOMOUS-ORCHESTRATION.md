@@ -352,7 +352,7 @@ append`, never edited after the fact.
    existed), record `phase: applying`, and call `next` again — no worker
    is dispatched on this step. Implementation runs in **units**: each
    independent slice of the Propose step's seam list gets its own
-   worktree, branch, and Agent, reviewed and merged on its own before
+   worktree, branch, and subagent, reviewed and merged on its own before
    Check/Verify ever run.
 
    **Split.** With `units` empty, `next` returns `split` — tier `deep`
@@ -391,7 +391,7 @@ append`, never edited after the fact.
    orchestrator runs `unit create --unit <u>` for each (branches
    `change/<name>.<u>` off the tip of `change/<name>` into
    `<ws>/<name>.<u>`, refusing an unknown unit, a dep not yet `merged`, or
-   a dirty change worktree) and dispatches one Agent per unit into that
+   a dirty change worktree) and dispatches one subagent per unit into that
    worktree at the tier `unit_tiers` names for it — `deep` for a
    **foundation unit** (two or more units depend on it directly: it
    serialises the wave, and a defect in it costs every dependent a rerun),
@@ -799,7 +799,7 @@ action `next` also prints `prompt: <path>` right after `reason:`, then any
 `overlay:`, then `agent: openspec-<role>` (and `also_prompt:` /
 `also_overlay:` / `also_agent:` after `also_model:` on `check`) — the
 engine prompt for that role and the agent definition to dispatch it as
-(`subagent_type`); see **Role agents** and **Role overlays** above. Actions: `classify`,
+(by name, through the host's subagent mechanism); see **Role agents** and **Role overlays** above. Actions: `classify`,
 `grill` (tier `none` — the orchestrator runs the interview itself),
 `propose`, `critique`, `revise`, `gate0`, `apply` (tier `none` — bookkeeping only, no
 worker dispatched), `split`, `unit-spawn`, `unit-critique`, `unit-revise`,
@@ -1042,8 +1042,10 @@ accepted as the checker, and `model verify|critic` and `next` print an
 configuration is what separates the two reads in that case — the fresh
 context and the input contract below, which every checker gets, plus the
 higher effort. Hosts whose agent dispatch cannot set effort per agent
-(Claude Code's Agent tool today) should leave `checker_effort` unset and
-keep distinct models. The generator's tier is read from its session
+should leave `checker_effort` unset and keep distinct models. A host
+without per-dispatch models (`model: session`, see below) is exempt from
+the distinct-model rule: every checker runs on the session model, and its
+independence is the fresh context and input contract alone. The generator's tier is read from its session
 entry (`tier=` on the last `applying`/`checking` entry for Verify, the
 last `proposed` entry for the critic); an entry without a tier is inferred
 from its model against the tier table, and with no history at all the
@@ -1066,9 +1068,13 @@ get --store <slug> --tier <tier>` — the store's `openspec/config.yaml`
 (`orchestration.model_mechanical` / `model_standard` / `model_deep` /
 `model_max`) if
 set, else the engine's default table (`model_for_tier` in
-`scripts/lib.sh`):
+`scripts/lib.sh`). The default table applies when `orchestration.tool` is
+`claude-code` (or unset), the one host that sets a model on each subagent
+dispatch. On `cursor`, `copilot`, `codex` and `opencode` every tier
+defaults to `session`: the model is fixed by the session or the agent file,
+so dispatch on it and keep the tier as the record of intended strength.
 
-| tier         | default model               |
+| tier         | default model (Claude Code) |
 |--------------|------------------------------|
 | `mechanical` | `claude-haiku-4-5-20251001` |
 | `standard`   | `claude-sonnet-5`           |
@@ -1100,7 +1106,7 @@ full design and why the mapping lives only in the resolved root's `openspec/conf
 (`orchestration.stage_skills`), never in a skill's own frontmatter, and never behind any
 other switch:
 
-- **`plan`** — at most one name. If set, dispatch that skill (via the `Skill` tool, not a
+- **`plan`** — at most one name. If set, dispatch that skill (as a skill, not a
   bare model call) to draft the delta spec and seam list **instead of** the deep-tier
   model — this *replaces* the default drafter, it does not add to it. If unset, Propose
   runs exactly as described in Phases step 3: deep tier, no skill involved.
@@ -1123,7 +1129,7 @@ is, not something this engine detects in advance.
 
 ### Role agents (effort and tools per role, shipped beside the skill)
 
-Each role is also a Claude Code agent definition, `agents/openspec-<role>/AGENT.md`
+Each role is also an agent definition, `agents/openspec-<role>/AGENT.md`
 in this repository and installed by Atlas as `openspec-proposer`,
 `openspec-critic`, `openspec-verifier`, `openspec-unit-critic`,
 `openspec-worker`. The body is the role prompt verbatim (`tools/build-agents.sh`
@@ -1135,8 +1141,11 @@ was already the highest at `medium` (measured: 44% for the critic);
 and a **tool allowlist**: checkers get no `Edit`, nobody gets `Agent`
 (the orchestrator owns dispatch). The model is not in the file: `next`
 prints `agent:` beside `model:`, and the orchestrator passes both on the
-Agent call, so one definition serves every tier. Effort is not settable
-per call any other way; this is the host's only lever for it. When the
+dispatch, so one definition serves every tier. Effort is not settable
+per call any other way; this is the host's only lever for it. Atlas copies
+the file verbatim to every tool (Codex wraps it in TOML), so `effort:` and
+the Claude Code tool names in `tools:` only bind on Claude Code; other
+hosts ignore them and the role prompt's own rules carry the restriction. When the
 agent is not installed (Step 0 offers to install it), dispatch a general
 agent with the prompt text instead — same instructions, session effort.
 This is also what makes **same model, different configuration** real for

@@ -21,7 +21,7 @@ while IFS=: read -r role effort tools desc; do
   out="agents/openspec-$role/AGENT.md"
   mkdir -p "$(dirname "$out")"
   {
-    printf -- '---\nname: openspec-%s\ndescription: %s. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.\ntools: %s\neffort: %s\n---\n' "$role" "$desc" "$tools" "$effort"
+    printf -- '---\nname: openspec-%s\ndescription: %s. Dispatched by the openspec-orchestrator engine with the tier model on the dispatch; never invoke directly.\ntools: %s\neffort: %s\n---\n' "$role" "$desc" "$tools" "$effort"
     cat "$src"
   } > "$out"
   echo "wrote $out ($effort)"

@@ -236,7 +236,10 @@ run_gate() {
 # orchestration.model_<tier> from the store's config first; falls back to
 # the default table below when unset. The default table is the only place
 # in the engine that names a specific model id — update it here, not
-# per-callsite, when the current-best model changes.
+# per-callsite, when the current-best model changes. Only Claude Code sets a
+# model on each subagent dispatch; every other host fixes the model in the
+# agent file or the session, so its default is `session` (dispatch on the
+# session model) and a tier there is advisory unless model_<tier> is set.
 model_for_tier() {
   local slug="$1" tier="$2"
   local cfg
@@ -252,6 +255,9 @@ model_for_tier() {
     echo "$v"
     return 0
   fi
+  case "$tier" in mechanical|standard|deep|max) ;; *) echo "unknown tier: $tier" >&2; return 1 ;; esac
+  local tool; tool="$(host_tool "$slug")" || return 1
+  [ "$tool" = claude-code ] || { echo session; return 0; }
   case "$tier" in
     mechanical) echo "claude-haiku-4-5-20251001" ;;
     standard)   echo "claude-sonnet-5" ;;
@@ -259,6 +265,15 @@ model_for_tier() {
     max)        echo "claude-fable-5-1" ;;
     *)          echo "unknown tier: $tier" >&2; return 1 ;;
   esac
+}
+
+# host_tool <store-slug> -> orchestration.tool, the agent tool driving this
+# store; unset means claude-code so stores written before the key keep
+# their per-dispatch model tiers.
+HOST_TOOLS="claude-code cursor copilot codex opencode"
+host_tool() {
+  local t; t="$(orch_scalar "$1" tool)"; t="${t:-claude-code}"
+  case " $HOST_TOOLS " in *" $t "*) echo "$t" ;; *) echo "unknown orchestration.tool '$t' (one of: $HOST_TOOLS)" >&2; return 1 ;; esac
 }
 
 # orch_scalar <store-slug> <key> -> orchestration.<key> as a bare scalar,
@@ -329,7 +344,7 @@ role_for_action() {
 # `plan`, if set, REPLACES the deep-tier drafter; `critic`/`test`, if
 # non-empty, STACK on top of the built-in tier/model checker — the caller
 # (never this function) is responsible for honoring that distinction and
-# for actually dispatching each name via the Skill tool.
+# for actually invoking each named skill.
 stage_skills() {
   local slug="$1" stage="$2"
   local cfg
@@ -890,6 +905,9 @@ checker_pick() {
   local cand=$((idx + 1)); [ "$cand" -lt "${#ladder[@]}" ] || cand=$((idx - 1))
   local t="${ladder[$cand]}" m; m="$(model_for_tier "$slug" "$t")"
   [ "$m" != "$gen" ] && { echo "$t $m"; return 0; }
+  # A host without per-dispatch models reviews on the same model; the
+  # checker's independence is its fresh context alone.
+  [ "$m" = session ] && { echo "$t $m"; return 0; }
   [ -n "$(checker_effort "$slug")" ] && { echo "$t $m"; return 0; }
   echo "checker tier $t resolves to the $label's own model ($gen) — map a different model in orchestration.model_* or set orchestration.checker_effort in $(store_config "$slug")" >&2
   return 1
@@ -966,7 +984,7 @@ verify_pick() {
   if [ "$(tier_index "$VERIFY_FLOOR")" -gt "$(tier_index "$chosen")" ]; then chosen="$VERIFY_FLOOR"; note="floor: $VERIFY_FLOOR"; fi
   if [ -n "$prev" ] && [ "$(tier_index "$prev")" -gt "$(tier_index "$chosen")" ]; then chosen="$prev"; note="floor: previous round ran at $prev"; fi
   local model; model="$(model_for_tier "$1" "$chosen")"
-  if [ "$model" = "$m" ] && [ -z "$(checker_effort "$1")" ]; then
+  if [ "$model" = "$m" ] && [ "$model" != session ] && [ -z "$(checker_effort "$1")" ]; then
     echo "verify floor tier $chosen resolves to the implementer's own model ($m) — check orchestration.model_* in $(store_config "$1")" >&2; return 1
   fi
   echo "$chosen $model${note:+ $note}"
@@ -1044,10 +1062,10 @@ pillars_trivial() {
 # emit_role_lines <slug> <action> -> for a role-bearing action prints
 # `prompt: <path>`, then `overlay: <path>` when the store has an overlay
 # for that role.
-# role_agent <role> -> the Claude Code agent definition the orchestrator
-# dispatches this role as (`subagent_type`), installed by Atlas beside the
-# skill. It carries the role's effort and tool allowlist; the model still
-# comes from the tier table, passed on the Agent call.
+# role_agent <role> -> the agent definition the orchestrator dispatches this
+# role as, installed by Atlas beside the skill. It carries the role's effort
+# and tool allowlist; the model comes from the tier table, passed on the
+# dispatch where the host supports it.
 role_agent() { echo "openspec-$1"; }
 
 emit_role_lines() {
@@ -1212,7 +1230,7 @@ next_action_applying() {
       local ut; ut="$(unit_tier "$slug" "$name" "$u")"
       tiers="$tiers$u=$ut;"; [ "$ut" = deep ] && st=deep
     done
-    _na_emit unit-spawn "$st" "$(model_for_tier "$slug" "$st")" "capacity free: unit create then one Agent per ready unit, at the tier unit_tiers gives it (deep for a unit others depend on, standard for a leaf)"
+    _na_emit unit-spawn "$st" "$(model_for_tier "$slug" "$st")" "capacity free: unit create then one subagent per ready unit, at the tier unit_tiers gives it (deep for a unit others depend on, standard for a leaf)"
     printf 'unit_tiers: %s\n' "${tiers%;}"
     printf 'units: %s\n' "$ready_line"
     printf 'running: %s\n' "$running_line"
