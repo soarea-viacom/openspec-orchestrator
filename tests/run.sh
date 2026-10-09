@@ -724,7 +724,7 @@ t0=$SECONDS
 check_out "gate run names a timed-out gate" "gate timed out after 2s" bash -c "$RC gate run --store teststore3 --project '$PROJECT' --mode full --trunk 2>&1; true"
 check "gate run timeout returns within the limit, not when stdin closes" test $((SECONDS - t0)) -lt 15
 check "gate run timeout exits 124" bash -c "$RC gate run --store teststore3 --project '$PROJECT' --mode full --trunk >/dev/null 2>&1; test \$? -eq 124"
-check "gate run timeout kills the gate's children" bash -c "! pgrep -f 'sleep 31337'"
+check "gate run timeout kills the gate's children" bash -c "! pgrep -f 'sleep [3]1337'"
 
 # tasks open: unchecked tasks.md lines, recorded as manual_tasks_open
 $RC state init --store teststore --name feat-tasks

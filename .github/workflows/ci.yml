@@ -1,0 +1,25 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure git identity
+        run: |
+          git config --global user.name ci
+          git config --global user.email ci@example.invalid
+      - name: Tests
+        run: bash tests/run.sh
+      - name: Release bump
+        if: github.event_name == 'pull_request'
+        run: tools/check-release-bump.sh "origin/${{ github.base_ref }}"

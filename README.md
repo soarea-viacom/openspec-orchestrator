@@ -266,6 +266,8 @@ accept a list and stack on top of the built-in checker. See
 bash tests/run.sh
 ```
 
+CI runs this on every PR and push to `main`, and on PRs `tools/check-release-bump.sh` requires one new `releases.json` entry when `skills/openspec-orchestrator/` or `agents/` change.
+
 Exercises `skills/openspec-orchestrator/scripts/run-change` against a temporary registry and git origin/clone: slots,
 workspaces, gates, merge lane, the local-vs-external guard, `stage-skills get`, and state
 transitions. All three scripts must also pass `bash -n`.
