@@ -7,7 +7,8 @@ base="${1:?usage: $0 <base-ref>}"
 REL=skills/openspec-orchestrator/releases.json
 mb="$(git merge-base "$base" HEAD)"
 
-changed="$(git diff --name-only "$mb" HEAD -- skills/openspec-orchestrator agents | grep -vx "$REL" || true)"
+# releases.json is itself installed, so editing it alone still needs a valid history.
+changed="$(git diff --name-only "$mb" HEAD -- skills/openspec-orchestrator agents)"
 [ -n "$changed" ] || { echo "no installed files changed; no bump required"; exit 0; }
 
 python3 - "$REL" <(git show "$mb:$REL") <<'EOF'
