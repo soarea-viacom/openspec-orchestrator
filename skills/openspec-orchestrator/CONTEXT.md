@@ -121,9 +121,10 @@
   `standard`, `deep` — the `none` tier runs no model) to a concrete model
   id, read via `scripts/run-change model get --store <slug> --tier
   <tier>`. Resolved from the store's `openspec/config.yaml`
-  (`orchestration.model_<tier>`) if set, else the default table in
-  `model_for_tier` (`scripts/lib.sh`) — the only place a specific model id
-  is hardcoded in the engine.
+  (`orchestration.model_<tier>`, `model_<tier>_fallback`) if set, else
+  `models.tsv` for the store's `orchestration.tool` — the only place model
+  ids are named. Two models per tier (default, fallback); newest version per
+  family wins.
 - **Generator/checker split**: the rule that a checker runs one tier
   above the generator whose output it judges — `mechanical < standard <
   deep < max` — dropping to the tier below only when the generator is

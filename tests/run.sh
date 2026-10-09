@@ -127,7 +127,7 @@ check_out "second request from same worker refused" "already used its one adviso
 check_out "request from another worker granted" "claude-opus-5" $RC advisor request --store teststore --name feat-a --worker w2
 check_out "third request hits the per-change cap" "advisor cap reached" bash -c "$RC advisor request --store teststore --name feat-a --worker w3 2>&1; true"
 check_out "status shows cap reached" "2/2" $RC status --store teststore
-check_out "advisor entry records the asking worker" "role=advisor tier=deep model=claude-opus-5 for=w1" $RC session list --store teststore --name feat-a
+check_out "advisor entry records the asking worker" "role=advisor tier=deep model=claude-opus-5-5 for=w1" $RC session list --store teststore --name feat-a
 
 # slots (cap=2 from store config)
 s1="$($RC slot acquire --store teststore --project "$PROJECT")"
@@ -161,7 +161,7 @@ check "branch removed" bash -c "! git -C '$PROJECT' rev-parse --verify -q change
 # gates (config read from the store, project has no openspec/)
 
 # tier -> model
-check_out "model get falls back to default for mechanical" "claude-haiku-4-5-20251001" $RC model get --store teststore --tier mechanical
+check_out "model get falls back to default for mechanical" "claude-haiku-5-5" $RC model get --store teststore --tier mechanical
 check_out "model get falls back to default for deep" "claude-opus-5" $RC model get --store teststore --tier deep
 cat >> "$STORE/openspec/config.yaml" <<'EOF'
   model_deep: "claude-opus-5-custom"
@@ -240,7 +240,7 @@ done <<<"$AGENT_EFFORT"
 for role in critic verifier unit-critic; do
   check "checker agent $role has no Edit tool" bash -c "! grep -E '^tools:.*\bEdit\b' agents/openspec-$role/AGENT.md"
 done
-check "catalog lists the five role agents" bash -c "[ \$(python3 -c \"import json;print(len(json.load(open('atlas-catalog.json'))['agents']))\") -eq 5 ]"
+check "catalog lists the five role agents" bash -c "[ \$(python3 -c \"import json;print(sum(not k.endswith(('-claude-code','-cursor','-copilot','-codex','-opencode')) for k in json.load(open('atlas-catalog.json'))['agents']))\") -eq 5 ]"
 
 # role overlays: <store>/openspec/roles/<role>.md, text printed verbatim
 check_out "roles get with no overlay prints nothing" "" $RC roles get --store teststore --role critic
@@ -287,7 +287,7 @@ check_out "model verify contract makes a stale config a warning" "else one warni
 check "model verify contract names no Project glossary or ADRs" bash -c "out=\"\$($RC model verify --store teststore --name feat-verify)\" && case \"\$out\" in *openspec/CONTEXT.md*|*openspec/adr/*) exit 1 ;; esac"
 out_cc="$($RC model critic --store teststore --name feat-critic 2>/dev/null || true)"
 case "$out_cc" in *"config.yaml"*) echo "FAIL model critic contract does not name the store config"; fails=$((fails+1)) ;; *) echo "ok   model critic contract does not name the store config" ;; esac
-$RC session append --store teststore --name feat-infer role worker phase applying model claude-sonnet-5 transcript_id t1
+$RC session append --store teststore --name feat-infer role worker phase applying model claude-sonnet-5-5 transcript_id t1
 check_out "model verify infers the tier from the model when an entry has none" "claude-opus-5-custom" $RC model verify --store teststore --name feat-infer
 cat >> "$STORE/openspec/config.yaml" <<'EOF'
   model_standard: "claude-opus-5-custom"
@@ -347,7 +347,7 @@ $RC state init --store store-vf --name feat-vf
 $RC session append --store store-vf --name feat-vf role worker phase applying tier standard model claude-sonnet-5 transcript_id v1
 check_out "model verify: standard implementer -> deep (tier-above, no floor note)" "claude-opus-5" $RC model verify --store store-vf --name feat-vf
 vf_full="$($RC model verify --store store-vf --name feat-vf)"; vf_line1="${vf_full%%$'\n'*}"
-check "model verify: first line is the bare model id even with a floor" test "$vf_line1" = claude-opus-5
+check "model verify: first line is the bare model id even with a floor" test "$vf_line1" = claude-opus-5-5
 $RC session append --store store-vf --name feat-vf role worker phase checking tier mechanical model claude-haiku-4-5-20251001 transcript_id fix1
 check_out "model verify: mechanical fixer still gets a deep Verify" "claude-opus-5" $RC model verify --store store-vf --name feat-vf
 $RC state set --store store-vf --name feat-vf phase checking last_gate_result green
@@ -375,16 +375,86 @@ orchestration:
   tool: codex
   model_max: "gpt-custom"
 EOF
-check_out "model get resolves to session on a non-Claude host" "session" $RC model get --store store-host --tier deep
+check_out "model get uses the host tool's catalogue" "gpt-6-astra" $RC model get --store store-host --tier deep
 check_out "model get still honors an override on a non-Claude host" "gpt-custom" $RC model get --store store-host --tier max
 $RC state init --store store-host --name feat-host
-$RC session append --store store-host --name feat-host role worker phase applying tier standard model session transcript_id h1
-check_out "model verify accepts the session model for both generator and checker" "session" $RC model verify --store store-host --name feat-host
-$RC session append --store store-host --name feat-host role proposer phase proposed tier deep model session transcript_id h2
+$RC session append --store store-host --name feat-host role worker phase applying tier standard model gpt-6.1-sol transcript_id h1
+check_out "model verify picks from the host tool's catalogue" "gpt-6-astra" $RC model verify --store store-host --name feat-host
+$RC session append --store store-host --name feat-host role proposer phase proposed tier deep model gpt-6-astra transcript_id h2
 check_out "model critic still uses a mapped tier above on a non-Claude host" "gpt-custom" $RC model critic --store store-host --name feat-host
 sed -i.bak 's/tool: codex/tool: emacs/' "$TMP/store-host/openspec/config.yaml"
 check_out "unknown host tool errors" "unknown orchestration.tool 'emacs'" bash -c "$RC model get --store store-host --tier deep 2>&1; true"
-check "no doc names Claude Code's Agent tool or subagent_type" bash -c "! grep -nE 'Agent tool|Agent call|subagent_type|Skill tool' SKILL.md AUTONOMOUS-ORCHESTRATION.md CONTEXT.md scripts/lib.sh scripts/roles/*.md ../../agents/*/AGENT.md"
+sed -i.bak 's/tool: emacs/tool: codex/' "$TMP/store-host/openspec/config.yaml"
+
+# model catalogue: newest version per family, a different family as fallback
+check_out "model get prints a fallback from the next family" "fallback: gpt-6.1-sol" $RC model get --store store-host --tier deep
+check_out "model get: newest version in a family wins (6.1 over 6)" "gpt-6.1-sol" $RC model get --store store-host --tier standard
+mkdir -p "$TMP/store-host/.orchestration"
+printf 'gpt-6-astra\ngpt-6.9-sol\ngpt-6.10-sol\n' > "$TMP/store-host/.orchestration/models.codex.txt"
+check_out "a listed newer version is promoted, compared per dotted part (6.10 over 6.9)" "gpt-6.10-sol" $RC model get --store store-host --tier standard
+check_out "an unlisted catalogue id is dropped (no luna listed)" "gpt-6.10-sol" $RC model get --store store-host --tier mechanical
+rm "$TMP/store-host/.orchestration/models.codex.txt"
+cat >> "$TMP/store-host/openspec/config.yaml" <<'EOF'
+  model_deep_fallback: "gpt-fb-custom"
+EOF
+check_out "model_<tier>_fallback overrides the catalogue fallback" "fallback: gpt-fb-custom" $RC model get --store store-host --tier deep
+check_out "models refresh is a no-op for a tool without a model listing" "catalogue used as-is" $RC models refresh --store teststore
+mkdir -p "$TMP/codex-home/.codex"
+echo '{"models":[{"slug":"gpt-6-luna","visibility":"list"},{"slug":"gpt-5.6-terra","visibility":"list"},{"slug":"gpt-6-astra","visibility":"hide"}]}' > "$TMP/codex-home/.codex/models_cache.json"
+HOME="$TMP/codex-home" $RC models refresh --store store-host >/dev/null
+check_out "codex refresh: an account without sol or astra falls back to terra" "gpt-5.6-terra" $RC model get --store store-host --tier standard
+rm "$TMP/store-host/.orchestration/models.codex.txt"
+mkdir -p "$TMP/fakebin"
+printf '#!/bin/sh\nprintf "Available models\\n\\nauto - Auto\\nclaude-sonnet-5-5-medium - S\\nclaude-sonnet-5-5-thinking-high - S\\ngpt-5.6-sol-high-fast - G\\n"\n' > "$TMP/fakebin/agent"; chmod +x "$TMP/fakebin/agent"
+mkdir -p "$TMP/store-cur/openspec"
+cat >> "$OPENSPEC_STORE_REGISTRY" <<EOF
+  store-cur:
+    local_path: $TMP/store-cur
+EOF
+printf 'orchestration:\n  tool: cursor\n' > "$TMP/store-cur/openspec/config.yaml"
+PATH="$TMP/fakebin:$PATH" $RC models refresh --store store-cur >/dev/null
+check "cursor refresh reduces effort and thinking variants to bare ids" bash -c "! grep -qE -- '-(medium|high|thinking|fast)\$' '$TMP/store-cur/.orchestration/models.cursor.txt' && grep -qx claude-sonnet-5-5 '$TMP/store-cur/.orchestration/models.cursor.txt' && grep -qx gpt-5.6-sol '$TMP/store-cur/.orchestration/models.cursor.txt'"
+check_out "cursor standard resolves from the refreshed list" "claude-sonnet-5-5" $RC model get --store store-cur --tier standard
+check_out "next prints a fallback_model" "fallback_model: " $RC next --store store-host --name feat-host
+check_out "next names the per-tier agent" "agent: openspec-" $RC next --store store-host --name feat-host
+
+for tool in claude-code cursor copilot codex opencode; do
+  for tier in mechanical standard deep max; do
+    check "catalogue: $tool $tier has a default and a different fallback" bash -c "source $SKILL/scripts/lib.sh && a=\$(model_pick $tool $tier 1) && b=\$(model_pick $tool $tier 2) && [ -n \"\$a\" ] && [ \"\$a\" != \"\$b\" ]"
+  done
+done
+
+# per-tool agents: generated, 20 per tool, model pinned to the catalogue default
+h_before="$(find agents atlas-catalog.json -type f | sort | xargs shasum | shasum)"
+./tools/build-agents.sh >/dev/null
+check "build-agents.sh output is committed (no drift)" test "$h_before" = "$(find agents atlas-catalog.json -type f | sort | xargs shasum | shasum)"
+for tool in claude-code cursor copilot codex opencode; do
+  check "$tool ships 20 per-tier agents" test "$(find agents/$tool -name AGENT.md | wc -l | tr -d ' ')" = 20
+done
+check "claude-code critic-max pins the max default" grep -qx "model: $(bash -c "source $SKILL/scripts/lib.sh; model_pick claude-code max 1")" agents/claude-code/openspec-critic-max/AGENT.md
+check "copilot agents carry a two-item model list" grep -qE "^model: \['[^']+', '[^']+'\]$" agents/copilot/openspec-worker-standard/AGENT.md
+check "cursor checker agents are readonly" grep -qx "readonly: true" agents/cursor/openspec-verifier-deep/AGENT.md
+check "catalog lists 100 per-tool agents" bash -c "[ \$(python3 -c \"import json;print(sum(k.endswith(('-claude-code','-cursor','-copilot','-codex','-opencode')) for k in json.load(open('atlas-catalog.json'))['agents']))\") -eq 100 ]"
+
+# standalone install: one home, linked into each tool's dirs
+IH="$TMP/install-home"
+for tool in claude-code cursor copilot codex opencode; do
+  check "install.sh --tool $tool succeeds" env HOME="$IH" XDG_DATA_HOME= CLAUDE_CONFIG_DIR= tools/install.sh --tool $tool
+done
+check "claude-code agent links into the home" test -L "$IH/.claude/agents/openspec-critic-max"
+check "cursor agent is a flat .md link" test -L "$IH/.cursor/agents/openspec-critic-max.md"
+check "copilot agent is a .agent.md link" test -L "$IH/.copilot/agents/openspec-critic-max.agent.md"
+check "opencode uses ~/.config/opencode" test -L "$IH/.config/opencode/agents/openspec-critic-max.md"
+check "skill dir links into the home" test -L "$IH/.codex/skills/openspec-orchestrator"
+check "codex agents are TOML with model and effort keys" python3 -c "import tomllib,sys; d=tomllib.load(open('$IH/.codex/agents/openspec-verifier-deep.toml','rb')); sys.exit(0 if d['model']=='gpt-6-astra' and d['model_reasoning_effort']=='high' and d['developer_instructions'].startswith('You are') else 1)"
+ih1="$(cd "$IH" && find . | sort | shasum)"
+env HOME="$IH" XDG_DATA_HOME= tools/install.sh --tool codex >/dev/null
+check "install.sh rerun changes nothing" test "$ih1" = "$(cd "$IH" && find . | sort | shasum)"
+echo mine > "$IH/.cursor/agents/openspec-mine.md"
+env HOME="$IH" XDG_DATA_HOME= tools/install.sh --tool cursor --uninstall
+check "uninstall removes its own links" test ! -e "$IH/.cursor/agents/openspec-critic-max.md"
+check "uninstall leaves files it did not install" test -f "$IH/.cursor/agents/openspec-mine.md"
+check "no doc names Claude Code's Agent tool or subagent_type" bash -c "cd $SKILL && ! grep -rnE 'Agent tool|Agent call|subagent_type|Skill tool' SKILL.md AUTONOMOUS-ORCHESTRATION.md CONTEXT.md scripts/lib.sh scripts/roles ../../agents"
 
 # initiatives: own record, own critique-round counter, shown as a tree in status
 check "initiative init creates file" $RC initiative init --store teststore --name init-a
@@ -423,7 +493,7 @@ check_out "next: fresh change -> classify first" "action: classify" $N
 check_out "next: classify runs at standard" "tier: standard" $N
 check_out "next: classify names the pillar vocabulary" "scope=file|seam|seams;blast=none|project|public;novelty=known|new;deps=none|dev|runtime" $N
 check_line "next: classify prints the proposer prompt" "prompt: $PWD/$SKILL/scripts/roles/proposer.md" $N
-check_line "next: classify names the proposer agent" "agent: openspec-proposer" $N
+check_line "next: classify names the proposer agent" "agent: openspec-proposer-standard" $N
 $RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=huge;deps=none"
 check_out "next: unknown pillar value is refused" "unknown novelty 'huge'" bash -c "$N 2>&1; true"
 $RC state set --store teststore --name feat-next pillars "scope=seam;blast=none;novelty=known"
@@ -455,7 +525,7 @@ check_out "next: draft exists -> critique" "action: critique" $N
 check_out "next: critique of a deep draft runs at max" "tier: max" $N
 check_out "next: critique names the store's critic overlay" "overlay: $STORE/openspec/roles/critic.md" $N
 check_line "next: critique prints the engine critic prompt" "prompt: $PWD/$SKILL/scripts/roles/critic.md" $N
-check_line "next: critique names the critic agent" "agent: openspec-critic" $N
+check_out "next: critique names the critic agent at its tier" "agent: openspec-critic-" $N
 out_cr="$($N)"
 cr_reason="$(line_of reason: "$out_cr")"; cr_prompt="$(line_of prompt: "$out_cr")"; cr_ov="$(line_of overlay: "$out_cr")"
 check "next: critique prompt: is the line right after reason:" test "${cr_prompt:-x}" = "$(( ${cr_reason:-0} + 1 ))"
@@ -511,7 +581,7 @@ check_out "next: concurrent verify gets the distinct-model id" "also_model: clau
 out_chk="$($N)"
 case "$out_chk" in *"also_overlay:"*) echo "FAIL next: check prints no also_overlay without a verifier overlay"; fails=$((fails+1)) ;; *) echo "ok   next: check prints no also_overlay without a verifier overlay" ;; esac
 check_line "next: check prints the engine verifier prompt for the concurrent Verify" "also_prompt: $PWD/$SKILL/scripts/roles/verifier.md" $N
-check_line "next: check names the verifier agent for the concurrent Verify" "also_agent: openspec-verifier" $N
+check_out "next: check names the verifier agent for the concurrent Verify" "also_agent: openspec-verifier-" $N
 chk_model="$(line_of also_model: "$out_chk")"; chk_prompt="$(line_of also_prompt: "$out_chk")"
 check "next: check also_prompt: is the line right after also_model:" test "${chk_prompt:-x}" = "$(( ${chk_model:-0} + 1 ))"
 printf 'Verify the bump in releases.json matches the SKILL.md change.\n' > "$STORE/openspec/roles/verifier.md"
@@ -1128,7 +1198,7 @@ check "refused iterate logs nothing" test "$nlines_before" = "$nlines_after"
 check_out "unit still running while waiting on the advisor" "status: running" $RC unit get --store storeu1 --name feat-iter --unit a
 check_out "advisor request --unit grants and prints the deep model" "claude-opus-5" $RC advisor request --store storeu1 --name feat-iter --unit a --worker iter-w1
 check_out "advisor request --unit records advised at the current iteration" "advised: 2" $RC unit get --store storeu1 --name feat-iter --unit a
-check_out "advisor entry names the unit" "role=advisor tier=deep model=claude-opus-5 for=iter-w1 unit=a" $RC session list --store storeu1 --name feat-iter
+check_out "advisor entry names the unit" "role=advisor tier=deep model=claude-opus-5-5 for=iter-w1 unit=a" $RC session list --store storeu1 --name feat-iter
 check "advisor request --unit on an unknown unit is refused" bash -c "! $RC advisor request --store storeu1 --name feat-iter --unit zz --worker w9 >/dev/null 2>&1"
 check_out "iterate after advice, still red -> escalates" "escalating to Gate 1" bash -c "$RC unit iterate --store storeu1 --project '$UPROJECT1' --name feat-iter --unit a 2>&1; true"
 check_out "unit failed with fail_reason red-after-advice" "fail_reason: red-after-advice" $RC unit get --store storeu1 --name feat-iter --unit a
@@ -1326,7 +1396,7 @@ $RC session append --store storeu3 --name feat-owner role worker phase proposed 
 out1_full="$($RC model critic --store storeu3 --name feat-owner)"; out1="${out1_full%%$'\n'*}"
 out2_full="$($RC model critic --store storeu3 --name feat-owner --unit a)"; out2="${out2_full%%$'\n'*}"
 check "model critic line 1 is max over the deep proposer" test "$out1" = claude-fable-5-1
-check "model critic --unit line 1 is deep over the standard leaf worker" test "$out2" = claude-opus-5
+check "model critic --unit line 1 is deep over the standard leaf worker" test "$out2" = claude-opus-5-5
 check_out "model critic --unit contract mentions checks_commit" "checks_commit" $RC model critic --store storeu3 --name feat-owner --unit a
 check_out "model critic --unit contract mentions screenshot" "screenshot" $RC model critic --store storeu3 --name feat-owner --unit a
 check_out "model critic --unit contract mentions input:" "input:" $RC model critic --store storeu3 --name feat-owner --unit a

@@ -1042,10 +1042,10 @@ accepted as the checker, and `model verify|critic` and `next` print an
 configuration is what separates the two reads in that case — the fresh
 context and the input contract below, which every checker gets, plus the
 higher effort. Hosts whose agent dispatch cannot set effort per agent
-should leave `checker_effort` unset and keep distinct models. A host
-without per-dispatch models (`model: session`, see below) is exempt from
-the distinct-model rule: every checker runs on the session model, and its
-independence is the fresh context and input contract alone. The generator's tier is read from its session
+should leave `checker_effort` unset and keep distinct models. Codex
+offers three GPT levels for four tiers, and Cursor documents few ids until
+`models refresh` lists more, so `deep` and `max` share a default there:
+such a store sets `checker_effort` or maps `model_max`. The generator's tier is read from its session
 entry (`tier=` on the last `applying`/`checking` entry for Verify, the
 last `proposed` entry for the critic); an entry without a tier is inferred
 from its model against the tier table, and with no history at all the
@@ -1066,20 +1066,27 @@ caller that wants only the id pipes the output through `| head -n1`.
 Each tier maps to a concrete model, resolved via `scripts/run-change model
 get --store <slug> --tier <tier>` — the store's `openspec/config.yaml`
 (`orchestration.model_mechanical` / `model_standard` / `model_deep` /
-`model_max`) if
-set, else the engine's default table (`model_for_tier` in
-`scripts/lib.sh`). The default table applies when `orchestration.tool` is
-`claude-code` (or unset), the one host that sets a model on each subagent
-dispatch. On `cursor`, `copilot`, `codex` and `opencode` every tier
-defaults to `session`: the model is fixed by the session or the agent file,
-so dispatch on it and keep the tier as the record of intended strength.
+`model_max`, and `model_<tier>_fallback`) if set, else the model
+catalogue `models.tsv` for the store's `orchestration.tool`, read by
+`model_pick` in `scripts/lib.sh`. Each tier lists model families in
+preference order: the first family with an available model is the default,
+the next is the fallback, and within a family the newest version wins
+(compared per dotted part, so 6.10 beats 6.9). The catalogue holds only ids
+confirmed in each tool's docs; `models refresh` (Cursor, OpenCode) records
+what the tool actually offers, which drops ids it lacks and promotes a newer
+listed version of a known family without a catalogue edit.
 
-| tier         | default model (Claude Code) |
-|--------------|------------------------------|
-| `mechanical` | `claude-haiku-4-5-20251001` |
-| `standard`   | `claude-sonnet-5`           |
-| `deep`       | `claude-opus-5`             |
-| `max`        | `claude-fable-5-1`          |
+Defaults today (`model get` prints both):
+
+| tier | claude-code | cursor | copilot | codex | opencode |
+|---|---|---|---|---|---|
+| `mechanical` | haiku-5-5 / sonnet-5-5 | gpt-5.6-sol / opus-5 | Haiku 5.5 / GPT-6 Luna | gpt-6-luna / gpt-6.1-sol | haiku-5-5 / gpt-6-luna |
+| `standard` | sonnet-5-5 / opus-5-5 | gpt-5.6-sol / opus-5 | Sonnet 5.5 / GPT-6.1 Sol | gpt-6.1-sol / gpt-6-astra | sonnet-5-5 / gpt-6.1-sol |
+| `deep` | opus-5-5 / fable-5-1 | opus-5 / gpt-5.6-sol | Opus 5.5 / GPT-6 Astra | gpt-6-astra / gpt-6.1-sol | opus-5-5 / gpt-6-astra |
+| `max` | fable-5-1 / opus-5-5 | opus-5 / gpt-5.6-sol | Fable 5.1 / GPT-6 Astra | gpt-6-astra / gpt-6.1-sol | fable-5-1 / gpt-6-astra |
+
+The fallback is an availability escape, not a second opinion: it may be the
+generator's own model, which the `fallback 1` session entry makes visible.
 
 `none` runs no model — it's plain bash bookkeeping (`scripts/run-change`
 itself), never a task dispatched to an agent.
