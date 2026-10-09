@@ -76,7 +76,7 @@ check "run.sh parses" bash -n tests/run.sh
 # engine must be referenced somewhere other than its own definition.
 dead=""
 for fn in $(grep -ohE '^[a-z_]+\(\)' $SKILL/scripts/lib.sh $SKILL/scripts/run-change | tr -d '()'); do
-  if ! grep -hE "\b$fn\b" $SKILL/scripts/lib.sh $SKILL/scripts/run-change tests/run.sh | grep -qvE "^$fn\(\)"; then
+  if [ "$(grep -hE "\b$fn\b" $SKILL/scripts/lib.sh $SKILL/scripts/run-change tests/run.sh | grep -cvE "^$fn\(\)")" -eq 0 ]; then
     dead="$dead $fn"
   fi
 done
