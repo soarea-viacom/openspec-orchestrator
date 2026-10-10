@@ -260,41 +260,50 @@ models_list_file() { echo "$(orchestration_dir "$1")/models.$2.txt"; }
 # line, from the tool's own model listing) catalogue ids the tool does not
 # offer are dropped and a listed id matching a family's pattern competes on
 # version, so a release newer than the catalogue is used without an edit.
+# awk, not perl: next calls this five times and perl startup was most of
+# its wall time. The version is the pattern's first group; awk has no
+# captures, so it is cut out by stripping the text before and after it.
 model_pick() {
-  perl -e '
-    my ($file, $tool, $tier, $rank, $list) = @ARGV;
-    my (@order, %re, %cand, %listed, $have_list);
-    if ($list ne "" && -s $list) {
-      open my $l, "<", $list or die; $have_list = 1;
-      while (<$l>) { s/^\s+|\s+$//g; $listed{$_} = 1 if length }
+  awk -F'\t' -v tool="$1" -v tier="$2" -v rank="$3" -v list="${4:-}" '
+    function vcmp(a, b,   x, y, n, m, i, d) {
+      n = split(a, x, "."); m = split(b, y, "."); if (m > n) n = m
+      for (i = 1; i <= n; i++) { d = (x[i] + 0) - (y[i] + 0); if (d) return d }
+      return 0
     }
-    open my $f, "<", $file or die "no model catalogue at $file\n";
-    while (<$f>) {
-      next if /^\s*(#|$)/; chomp; my @c = split /\t+/; next unless $c[1] eq $tool;
-      if ($c[0] eq "tier" && $c[2] eq $tier) { @order = @c[3..$#c] }
-      elsif ($c[0] eq "family") { $re{$c[2]} = $c[3] }
-      elsif ($c[0] eq "model") { push @{$cand{$c[2]}}, [$c[3], $c[4]] }
+    function keep(fam, v, id,   d) {
+      d = (fam in bestv) ? vcmp(v, bestv[fam]) : 1
+      if (d > 0 || (d == 0 && id < bestid[fam])) { bestv[fam] = v; bestid[fam] = id }
     }
-    die "no tier $tier for tool $tool in $file\n" unless @order;
-    if ($have_list) {
-      for my $fam (keys %cand) { $cand{$fam} = [grep { $listed{$_->[1]} } @{$cand{$fam}}] }
-      for my $id (keys %listed) {
-        for my $fam (keys %re) {
-          next unless $id =~ /$re{$fam}/; (my $v = $1) =~ tr/-_/../;
-          push @{$cand{$fam}}, [$v, $id] unless grep { $_->[1] eq $id } @{$cand{$fam} || []};
-        }
+    function split_group(fam, p,   i, depth, o, c) {
+      for (i = 1; i <= length(p); i++) {
+        if (substr(p, i, 1) == "\\") { i++; continue }
+        if (substr(p, i, 1) == "(") { if (!o) o = i; depth++ }
+        else if (substr(p, i, 1) == ")" && o) { depth--; if (!depth) { c = i; break } }
+      }
+      pre[fam] = o ? substr(p, 1, o - 1) : p
+      suf[fam] = c ? substr(p, c + 1) : ""
+    }
+    function version_of(fam, id,   v) {
+      v = id; sub(pre[fam], "", v); sub(suf[fam], "", v); gsub(/[-_]/, ".", v); return v
+    }
+    BEGIN {
+      if (list != "") while ((getline l < list) > 0) {
+        gsub(/^[ \t]+|[ \t]+$/, "", l); if (l != "") { listed[l] = 1; have = 1 }
       }
     }
-    sub vcmp { my @a = split /\./, $_[0]; my @b = split /\./, $_[1];
-      for my $i (0 .. ($#a > $#b ? $#a : $#b)) { my $d = ($a[$i] // 0) <=> ($b[$i] // 0); return $d if $d } 0 }
-    my @picks;
-    for my $fam (@order) {
-      my @c = sort { vcmp($b->[0], $a->[0]) || $a->[1] cmp $b->[1] } @{$cand{$fam} || []};
-      push @picks, $c[0][1] if @c;
+    /^[ \t]*(#|$)/ || $2 != tool { next }
+    $1 == "tier" && $3 == tier { for (i = 4; i <= NF; i++) if ($i != "") order[++n] = $i }
+    $1 == "family" { re[$3] = $4; split_group($3, $4) }
+    $1 == "model" && (!have || ($5 in listed)) { seen[$3, $5] = 1; keep($3, $4, $5) }
+    END {
+      if (!n) { print "no tier " tier " for tool " tool " in " FILENAME > "/dev/stderr"; exit 1 }
+      if (have) for (id in listed) for (fam in re)
+        if (id ~ re[fam] && !((fam, id) in seen)) keep(fam, version_of(fam, id), id)
+      for (i = 1; i <= n; i++) if (order[i] in bestid) picks[++p] = bestid[order[i]]
+      if (rank + 0 > p) { print "tier " tier " on " tool " has no available model at rank " rank > "/dev/stderr"; exit 1 }
+      print picks[rank + 0]
     }
-    die "tier $tier on $tool has no available model at rank $rank\n" unless $picks[$rank - 1];
-    print "$picks[$rank - 1]\n";
-  ' "$MODELS_TSV" "$1" "$2" "$3" "${4:-}"
+  ' "$MODELS_TSV"
 }
 
 # host_tool <store-slug> -> orchestration.tool, the agent tool driving this
