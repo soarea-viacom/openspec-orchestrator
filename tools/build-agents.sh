@@ -21,8 +21,56 @@ while IFS=: read -r role effort tools desc; do
   out="agents/openspec-$role/AGENT.md"
   mkdir -p "$(dirname "$out")"
   {
-    printf -- '---\nname: openspec-%s\ndescription: %s. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.\ntools: %s\neffort: %s\n---\n' "$role" "$desc" "$tools" "$effort"
+    printf -- '---\nname: openspec-%s\ndescription: %s. Dispatched by the openspec-orchestrator engine with the tier model on the dispatch; never invoke directly.\ntools: %s\neffort: %s\n---\n' "$role" "$desc" "$tools" "$effort"
     cat "$src"
   } > "$out"
   echo "wrote $out ($effort)"
 done <<<"$TABLE"
+
+# Per-tool, per-tier agents: agents/<tool>/openspec-<role>-<tier>/AGENT.md
+# with that tier's default model pinned. Atlas copies one file to every
+# tool, so each tool's set is its own catalog entry (…-<tool>). Copilot takes
+# a priority list, so it carries the fallback too; Codex's Atlas wrapper
+# drops model:, which tools/install.sh writes into real TOML instead.
+ROLE_SRC="$ROLES"
+source skills/openspec-orchestrator/scripts/lib.sh
+TOOLS="claude-code cursor copilot codex opencode"
+TIER_LIST="mechanical standard deep max"
+rm -rf agents/claude-code agents/cursor agents/copilot agents/codex agents/opencode
+catalog_rows=""
+while IFS=: read -r role effort tools desc; do
+  for tool in $TOOLS; do
+    for tier in $TIER_LIST; do
+      m1="$(model_pick "$tool" "$tier" 1)"; m2="$(model_pick "$tool" "$tier" 2)"
+      name="openspec-$role-$tier"
+      out="agents/$tool/$name/AGENT.md"
+      mkdir -p "$(dirname "$out")"
+      {
+        printf -- '---\nname: %s\ndescription: %s, %s tier. Dispatched by the openspec-orchestrator engine; never invoke directly.\n' "$name" "$desc" "$tier"
+        case "$tool" in
+          claude-code) printf 'model: %s\ntools: %s\neffort: %s\n' "$m1" "$tools" "$effort" ;;
+          cursor) printf 'model: %s\n' "$m1"; case "$tools" in *Edit*) ;; *) printf 'readonly: true\n' ;; esac ;;
+          copilot) printf "model: ['%s', '%s']\n" "$m1" "$m2" ;;
+          codex) printf 'model: %s\neffort: %s\n' "$m1" "$effort" ;;
+          opencode) printf 'mode: subagent\nmodel: %s\n' "$m1" ;;
+        esac
+        printf -- '---\n'
+        cat "$ROLE_SRC/$role.md"
+      } > "$out"
+      catalog_rows+="$name-$tool	$out	$desc, $tier tier, for $tool"$'\n'
+    done
+  done
+done <<<"$TABLE"
+echo "wrote $(find agents/claude-code agents/cursor agents/copilot agents/codex agents/opencode -name AGENT.md | wc -l | tr -d ' ') per-tool agents"
+
+printf '%s' "$catalog_rows" | python3 -c '
+import json, sys
+rows = [l.split("\t") for l in sys.stdin.read().splitlines() if l]
+p = "atlas-catalog.json"
+cat = json.load(open(p, encoding="utf-8"))
+agents = {k: v for k, v in cat["agents"].items() if not any(k == r[0] for r in rows) and not k.endswith(("-claude-code", "-cursor", "-copilot", "-codex", "-opencode"))}
+for name, path, desc in rows:
+    agents[name] = {"description": desc + ". Dispatched by the openspec-orchestrator engine.", "path": path, "teams": ["*"], "required": False}
+cat["agents"] = agents
+open(p, "w", encoding="utf-8").write(json.dumps(cat, indent=2, ensure_ascii=False) + "\n")
+'

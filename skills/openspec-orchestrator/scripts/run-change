@@ -33,6 +33,7 @@ usage: run-change <command> [args]
   unit merge     --store <slug> --project <path> --name <change> --unit <u>
   unit pass      --store <slug> --name <change> --unit <u>
   model get      --store <slug> --tier mechanical|standard|deep|max
+  models refresh --store <slug>
   model verify   --store <slug> --name <change>
   model critic   --store <slug> --name <change> [--unit <u>]
   stage-skills get --store <slug> --stage plan|critic|test
@@ -668,6 +669,28 @@ cmd_model_get() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$TIER" ] || usage
   model_for_tier "$STORE" "$TIER"
+  echo "fallback: $(fallback_for_tier "$STORE" "$TIER")"
+}
+
+# Only cursor and opencode document a model-listing command; elsewhere the
+# catalogue is used as-is.
+# Codex has no list command; its cache holds the models this account may use.
+codex_models() {
+  python3 -c 'import json,os,sys; d=json.load(open(os.path.expanduser("~/.codex/models_cache.json"))); print("\n".join(m["slug"] for m in d["models"] if m.get("visibility")=="list"))'
+}
+
+cmd_models_refresh() {
+  parse_opts "$@"
+  [ -n "$STORE" ] || usage
+  local tool cmd; tool="$(host_tool "$STORE")" || exit 1
+  case "$tool" in cursor) cmd="agent models" ;; opencode) cmd="opencode models" ;; codex) cmd="codex_models" ;; *) echo "$tool has no model listing; catalogue used as-is"; return 0 ;; esac
+  [ "$cmd" = codex_models ] || command -v "${cmd%% *}" >/dev/null || { echo "${cmd%% *} not on PATH; catalogue used as-is"; return 0; }
+  local out; out="$(models_list_file "$STORE" "$tool")"
+  mkdir -p "$(dirname "$out")"
+  # Cursor lists every effort/thinking/fast variant as its own id but accepts the bare id, which the catalogue uses.
+  local strip='cat'; [ "$tool" = cursor ] && strip="sed -E -e :a -e s/-(fast|thinking|none|minimal|low|medium|high|xhigh|max|extra-high)\$// -e ta"
+  $cmd 2>/dev/null | grep -oE '[A-Za-z0-9][A-Za-z0-9._/:-]+' | $strip | sort -u > "$out.tmp" && mv "$out.tmp" "$out"
+  echo "wrote $(wc -l < "$out" | tr -d ' ') ids to $out"
 }
 
 print_checker_effort() {
@@ -679,6 +702,7 @@ cmd_model_verify() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$NAME" ] || usage
   verify_model "$STORE" "$NAME"
+  echo "fallback: $(fallback_for_tier "$STORE" "$(verify_tier "$STORE" "$NAME")")"
   print_checker_effort
   checker_inputs verify "$STORE" "$NAME"
 }
@@ -687,11 +711,14 @@ cmd_model_critic() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$NAME" ] || usage
   if [ -n "$UNIT" ]; then
-    unit_critic_pick "$STORE" "$NAME" "$UNIT" | cut -d' ' -f2
+    local pick; pick="$(unit_critic_pick "$STORE" "$NAME" "$UNIT")" || exit 1
+    echo "${pick#* }"
+    echo "fallback: $(fallback_for_tier "$STORE" "${pick%% *}")"
     print_checker_effort
     checker_inputs unit-critic "$STORE" "$NAME" "$UNIT"
   else
     critic_model "$STORE" "$NAME"
+    echo "fallback: $(fallback_for_tier "$STORE" "$(critic_tier "$STORE" "$NAME")")"
     print_checker_effort
     checker_inputs critic "$STORE" "$NAME"
   fi
@@ -1048,6 +1075,7 @@ case "$group $sub" in
   "unit iterate") cmd_unit_iterate "$@" ;;
   "unit merge") cmd_unit_merge "$@" ;;
   "model get") cmd_model_get "$@" ;;
+  "models refresh") cmd_models_refresh "$@" ;;
   "model verify") cmd_model_verify "$@" ;;
   "model critic") cmd_model_critic "$@" ;;
   "stage-skills get") cmd_stage_skills_get "$@" ;;
