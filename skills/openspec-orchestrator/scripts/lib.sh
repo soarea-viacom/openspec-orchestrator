@@ -246,7 +246,9 @@ model_for_tier() {
   [ -n "$v" ] && { echo "$v"; return 0; }
   model_pick "$tool" "$tier" "$rank" "$(models_list_file "$slug" "$tool")"
 }
-fallback_for_tier() { model_for_tier "$1" "$2" 2; }
+# fallback_if_any <store-slug> <tier> -> the fallback, or nothing: a tier
+# left with one family after models refresh still dispatches on its default.
+fallback_if_any() { model_for_tier "$1" "$2" 2 2>/dev/null || true; }
 
 MODELS_TSV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/models.tsv"
 
@@ -948,7 +950,7 @@ checker_model() {
   local slug="$1" t="$2" gen="$3" label="$4" m fb
   m="$(model_for_tier "$slug" "$t")" || return 1
   [ "$m" != "$gen" ] && { echo "$m"; return 0; }
-  fb="$(fallback_for_tier "$slug" "$t" 2>/dev/null || true)"
+  fb="$(fallback_if_any "$slug" "$t")"
   [ -n "$fb" ] && [ "$fb" != "$gen" ] && { echo "$fb"; return 0; }
   [ -n "$(checker_effort "$slug")" ] && { echo "$m"; return 0; }
   echo "checker tier $t and its fallback both resolve to the $label's own model ($gen) — map a different model in orchestration.model_* / model_${t}_fallback or set orchestration.checker_effort in $(store_config "$slug")" >&2
@@ -1134,11 +1136,11 @@ role_agent() {
 }
 
 # emit_fallback <slug> <tier> <model> -> `fallback_model:` for a model-bearing
-# tier, unless the dispatch already runs on the fallback (checker_model).
+# tier, unless there is none or the dispatch already runs on it (checker_model).
 emit_fallback() {
   case "$2" in none|"") return 0 ;; esac
-  local fb; fb="$(fallback_for_tier "$1" "$2")"
-  [ "$fb" = "$3" ] || printf 'fallback_model: %s\n' "$fb"
+  local fb; fb="$(fallback_if_any "$1" "$2")"
+  [ -z "$fb" ] || [ "$fb" = "$3" ] || printf 'fallback_model: %s\n' "$fb"
 }
 
 emit_role_lines() {
@@ -1459,7 +1461,7 @@ next_action() {
           local vov; vov="$(role_overlay "$slug" verifier)"
           [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
           printf 'also_agent: %s\n' "$(role_agent "$slug" verifier "$vt" "$vm")"
-          [ -n "$vt" ] && { vfb="$(fallback_for_tier "$slug" "$vt")"; [ "$vfb" = "$vm" ] || printf 'also_fallback_model: %s\n' "$vfb"; }
+          [ -n "$vt" ] && { vfb="$(fallback_if_any "$slug" "$vt")"; [ -z "$vfb" ] || [ "$vfb" = "$vm" ] || printf 'also_fallback_model: %s\n' "$vfb"; }
           emit_effort ;;
         red)
           if [ "$verify" = spec ] && [ "$spec_amend" = accepted ]; then

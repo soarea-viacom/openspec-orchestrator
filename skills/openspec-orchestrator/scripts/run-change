@@ -669,8 +669,10 @@ cmd_model_get() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$TIER" ] || usage
   model_for_tier "$STORE" "$TIER"
-  echo "fallback: $(fallback_for_tier "$STORE" "$TIER")"
+  print_fallback "$TIER"
 }
+# print_fallback <tier> -- `fallback: <model>`, nothing when the tier has none
+print_fallback() { local fb; fb="$(fallback_if_any "$STORE" "$1")"; [ -z "$fb" ] || echo "fallback: $fb"; }
 
 # Only cursor and opencode document a model-listing command; elsewhere the
 # catalogue is used as-is.
@@ -705,7 +707,7 @@ cmd_model_verify() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$NAME" ] || usage
   verify_model "$STORE" "$NAME"
-  echo "fallback: $(fallback_for_tier "$STORE" "$(verify_tier "$STORE" "$NAME")")"
+  print_fallback "$(verify_tier "$STORE" "$NAME")"
   print_checker_effort
   checker_inputs verify "$STORE" "$NAME"
 }
@@ -716,12 +718,12 @@ cmd_model_critic() {
   if [ -n "$UNIT" ]; then
     local pick; pick="$(unit_critic_pick "$STORE" "$NAME" "$UNIT")" || exit 1
     echo "${pick#*$'\t'}"
-    echo "fallback: $(fallback_for_tier "$STORE" "${pick%%$'\t'*}")"
+    print_fallback "${pick%%$'\t'*}"
     print_checker_effort
     checker_inputs unit-critic "$STORE" "$NAME" "$UNIT"
   else
     critic_model "$STORE" "$NAME"
-    echo "fallback: $(fallback_for_tier "$STORE" "$(critic_tier "$STORE" "$NAME")")"
+    print_fallback "$(critic_tier "$STORE" "$NAME")"
     print_checker_effort
     checker_inputs critic "$STORE" "$NAME"
   fi

@@ -86,6 +86,11 @@ mkdir -p "$TMP/codex-home/.codex"
 echo '{"models":[{"slug":"gpt-6-luna","visibility":"list"},{"slug":"gpt-5.6-terra","visibility":"list"},{"slug":"gpt-6-astra","visibility":"hide"}]}' > "$TMP/codex-home/.codex/models_cache.json"
 HOME="$TMP/codex-home" $RC models refresh --store store-host >/dev/null
 check_out "codex refresh: an account without sol or astra falls back to terra" "gpt-5.6-terra" $RC model get --store store-host --tier standard
+# one eligible family left for a tier: dispatch still works, just without a fallback
+check_not "model get prints no fallback line when the tier has none" "fallback:" $RC model get --store store-host --tier standard
+check "next dispatches when the checker tier has a single eligible family" $RC next --store store-host --name feat-host
+check_not "next prints no fallback_model when the tier has none" "fallback_model:" $RC next --store store-host --name feat-host
+check_out "next still prints the reason after the model" "reason:" $RC next --store store-host --name feat-host
 rm "$TMP/store-host/.orchestration/models.codex.txt"
 mkdir -p "$TMP/fakebin"
 printf '#!/bin/sh\nprintf "Available models\\n\\nauto - Auto\\nclaude-sonnet-5-5-medium - S\\nclaude-sonnet-5-5-thinking-high - S\\ngpt-5.6-sol-high-fast - G\\n"\n' > "$TMP/fakebin/agent"; chmod +x "$TMP/fakebin/agent"
