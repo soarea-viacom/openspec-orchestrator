@@ -126,6 +126,11 @@ echo mine > "$IH/.cursor/agents/openspec-mine.md"
 env HOME="$IH" XDG_DATA_HOME= tools/install.sh --tool cursor --uninstall
 check "uninstall removes its own links" test ! -e "$IH/.cursor/agents/openspec-critic-max.md"
 check "uninstall leaves files it did not install" test -f "$IH/.cursor/agents/openspec-mine.md"
+FH="$TMP/foreign-home"; mkdir -p "$FH/skill"; echo keep > "$FH/skill/user-note.txt"
+check_err "install.sh refuses a populated home it did not create" "refusing $FH" env HOME="$IH" OPENSPEC_ORCHESTRATOR_HOME="$FH" tools/install.sh --tool cursor
+check "install.sh left the foreign home untouched" test -f "$FH/skill/user-note.txt"
+check "install.sh accepts an empty home" env HOME="$IH" OPENSPEC_ORCHESTRATOR_HOME="$TMP/empty-home" tools/install.sh --tool cursor
+check "install.sh marks the home it created" test -f "$TMP/empty-home/.openspec-orchestrator"
 IHS="$TMP/install home"; PS="$TMP/project with space"; mkdir -p "$PS"
 check "install.sh handles a home with a space" env HOME="$IHS" XDG_DATA_HOME= tools/install.sh --tool cursor
 check "install.sh linked the skill under the spaced home" test -L "$IHS/.cursor/skills/openspec-orchestrator"

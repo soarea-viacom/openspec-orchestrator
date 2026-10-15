@@ -66,9 +66,16 @@ if [ "$UNINSTALL" = 1 ]; then
   exit 0
 fi
 
-# Home: skill + this tool's agents. Codex agents become TOML here, because
-# Codex reads model and model_reasoning_effort as keys, not frontmatter.
+# Home: skill + this tool's agents, replaced whole on every install. It is
+# this script's own copy, so a populated HOME_DIR must carry the marker a
+# first install leaves or it is someone else's directory and is refused.
+# Codex agents become TOML here, because Codex reads model and
+# model_reasoning_effort as keys, not frontmatter.
+if [ -e "$HOME_DIR" ] && [ ! -e "$HOME_DIR/.openspec-orchestrator" ] && [ -n "$(ls -A "$HOME_DIR" 2>/dev/null)" ]; then
+  echo "refusing $HOME_DIR: exists, is not empty and was not created by this script" >&2; exit 1
+fi
 run mkdir -p "$HOME_DIR/agents"
+run touch "$HOME_DIR/.openspec-orchestrator"
 run rm -rf "$HOME_DIR/skill" "$HOME_DIR/agents/$TOOL"
 run cp -R "$SRC/skills/openspec-orchestrator" "$HOME_DIR/skill"
 run mkdir -p "$HOME_DIR/agents/$TOOL"
