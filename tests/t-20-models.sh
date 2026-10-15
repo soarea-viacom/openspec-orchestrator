@@ -49,6 +49,17 @@ check_err "unknown host tool errors even for a tier with a model override" "unkn
 sed -i.bak 's/tool: emacs/tool: "*"/' "$TMP/store-host/openspec/config.yaml"
 check_err "host tool is matched exactly, not as a pattern" "unknown orchestration.tool '*'" $RC model get --store store-host --tier deep
 sed -i.bak 's/tool: "\*"/tool: codex/' "$TMP/store-host/openspec/config.yaml"
+# default Codex: deep and max share gpt-6-astra, so a deep proposer's max
+# critic runs on max's fallback instead of erroring
+mkstore store-cx >/dev/null <<'EOF'
+orchestration:
+  tool: codex
+EOF
+mkchange store-cx feat-cx
+$RC session append --store store-cx --name feat-cx role proposer phase proposed tier deep model gpt-6-astra transcript_id x1
+check_line "model critic on default Codex runs a deep proposer's critic on max's fallback" "gpt-6.1-sol" bash -c "$RC model critic --store store-cx --name feat-cx | sed -n 1p"
+check_out "next on default Codex dispatches that critic" "model: gpt-6.1-sol" $RC next --store store-cx --name feat-cx
+check_not "next prints no fallback_model when the checker already runs on it" "fallback_model:" $RC next --store store-cx --name feat-cx
 mkstore store-oc >/dev/null <<'EOF'
 orchestration:
   tool: opencode

@@ -123,9 +123,9 @@ tier: deep
 iterations: 1
 critique: ""
 EOF
-# teststore maps standard, deep and max all onto claude-opus-5-custom, so a
-# standard worker's tier-above checker is its own model: refused without
-# checker_effort, accepted with it.
+# teststore maps standard, deep, max and their fallbacks all onto
+# claude-opus-5-custom, so a standard worker's tier-above checker is its own
+# model either way: refused without checker_effort, accepted with it.
 check_err "applying: unit-critique with the worker's model at the tier above is refused" "own model" $RC next --store teststore --name feat-appl-critique
 cat >> "$STORE/openspec/config.yaml" <<'EOF'
   checker_effort: high

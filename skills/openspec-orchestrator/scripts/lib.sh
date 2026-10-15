@@ -935,6 +935,23 @@ tier_of_model() {
 # is a weak reviewer of its own output — so a store whose config maps that
 # neighbouring tier onto the generator's model is an error, never a silent
 # same-model review or a quiet drop to a weaker tier.
+# checker_model <store-slug> <tier> <gen-model> <label> -> the model a checker
+# at <tier> runs on: the tier's default unless that is the generator's own,
+# then the tier's fallback (a different family, so a different reader);
+# both colliding is an error unless checker_effort makes the same model a
+# different configuration. Codex and Cursor ship few ids, so deep and max
+# share a default there and the fallback is the normal route.
+checker_model() {
+  local slug="$1" t="$2" gen="$3" label="$4" m fb
+  m="$(model_for_tier "$slug" "$t")" || return 1
+  [ "$m" != "$gen" ] && { echo "$m"; return 0; }
+  fb="$(fallback_for_tier "$slug" "$t" 2>/dev/null || true)"
+  [ -n "$fb" ] && [ "$fb" != "$gen" ] && { echo "$fb"; return 0; }
+  [ -n "$(checker_effort "$slug")" ] && { echo "$m"; return 0; }
+  echo "checker tier $t and its fallback both resolve to the $label's own model ($gen) — map a different model in orchestration.model_* / model_${t}_fallback or set orchestration.checker_effort in $(store_config "$slug")" >&2
+  return 1
+}
+
 checker_pick() {
   local slug="$1" gtier="$2" gen="$3" label="$4"
   if [ -z "$gtier" ] && [ -n "$gen" ]; then gtier="$(tier_of_model "$slug" "$gen")"; fi
@@ -943,11 +960,8 @@ checker_pick() {
   for i in "${!ladder[@]}"; do [ "${ladder[$i]}" = "$gtier" ] && idx=$i; done
   [ "$idx" -ge 0 ] || { echo "unknown tier '$gtier' for $label" >&2; return 1; }
   local cand=$((idx + 1)); [ "$cand" -lt "${#ladder[@]}" ] || cand=$((idx - 1))
-  local t="${ladder[$cand]}" m; m="$(model_for_tier "$slug" "$t")"
-  [ "$m" != "$gen" ] && { echo "$t $m"; return 0; }
-  [ -n "$(checker_effort "$slug")" ] && { echo "$t $m"; return 0; }
-  echo "checker tier $t resolves to the $label's own model ($gen) — map a different model in orchestration.model_* or set orchestration.checker_effort in $(store_config "$slug")" >&2
-  return 1
+  local t="${ladder[$cand]}" m; m="$(checker_model "$slug" "$t" "$gen" "$label")" || return 1
+  echo "$t $m"
 }
 
 # unit_tier <store-slug> <name> <unit> -> deep for a foundation unit — one
@@ -1020,10 +1034,7 @@ verify_pick() {
   local chosen="$above" note=""
   if [ "$(tier_index "$VERIFY_FLOOR")" -gt "$(tier_index "$chosen")" ]; then chosen="$VERIFY_FLOOR"; note="floor: $VERIFY_FLOOR"; fi
   if [ -n "$prev" ] && [ "$(tier_index "$prev")" -gt "$(tier_index "$chosen")" ]; then chosen="$prev"; note="floor: previous round ran at $prev"; fi
-  local model; model="$(model_for_tier "$1" "$chosen")"
-  if [ "$model" = "$m" ] && [ -z "$(checker_effort "$1")" ]; then
-    echo "verify floor tier $chosen resolves to the implementer's own model ($m) — check orchestration.model_* in $(store_config "$1")" >&2; return 1
-  fi
+  local model; model="$(checker_model "$1" "$chosen" "$m" implementer)" || return 1
   echo "$chosen $model${note:+ $note}"
 }
 verify_note() { verify_pick "$1" "$2" 2>/dev/null | cut -d' ' -f3-; }
@@ -1112,10 +1123,12 @@ role_agent() {
   echo "openspec-$2-$3$suffix"
 }
 
-# emit_fallback <slug> <tier> -> `fallback_model:` for a model-bearing tier.
+# emit_fallback <slug> <tier> <model> -> `fallback_model:` for a model-bearing
+# tier, unless the dispatch already runs on the fallback (checker_model).
 emit_fallback() {
   case "$2" in none|"") return 0 ;; esac
-  printf 'fallback_model: %s\n' "$(fallback_for_tier "$1" "$2")"
+  local fb; fb="$(fallback_for_tier "$1" "$2")"
+  [ "$fb" = "$3" ] || printf 'fallback_model: %s\n' "$fb"
 }
 
 emit_role_lines() {
@@ -1140,7 +1153,7 @@ next_action_applying() {
 
   _na_emit() { # action tier model reason [set_phase]
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
-    emit_fallback "$slug" "$2"
+    emit_fallback "$slug" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
     emit_role_lines "$slug" "$1" "$2"
@@ -1345,7 +1358,7 @@ next_action() {
 
   emit() { # emit action tier model reason [set_phase]
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
-    emit_fallback "$slug" "$2"
+    emit_fallback "$slug" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
     emit_role_lines "$slug" "$1" "$2"
@@ -1436,7 +1449,7 @@ next_action() {
           local vov; vov="$(role_overlay "$slug" verifier)"
           [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
           printf 'also_agent: %s\n' "$(role_agent "$slug" verifier "$vt")"
-          [ -n "$vt" ] && printf 'also_fallback_model: %s\n' "$(fallback_for_tier "$slug" "$vt")"
+          [ -n "$vt" ] && { vfb="$(fallback_for_tier "$slug" "$vt")"; [ "$vfb" = "$vm" ] || printf 'also_fallback_model: %s\n' "$vfb"; }
           emit_effort ;;
         red)
           if [ "$verify" = spec ] && [ "$spec_amend" = accepted ]; then

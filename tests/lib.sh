@@ -99,13 +99,16 @@ mkorigin() {
   echo hello > "$PROJECT/README"
   git -C "$PROJECT" add -A && git -C "$PROJECT" commit -qm init && git -C "$PROJECT" push -q origin main
 }
-# teststore mapping standard, deep and max all onto one custom model, with
-# critic and worker overlays: the fixture the next-ladder tests assume
+# teststore mapping standard, deep and max (and their fallbacks) all onto
+# one custom model, with critic and worker overlays: the fixture the
+# next-ladder tests assume, where a same-model checker must be refused
 pin_models_custom() {
   cat >> "$STORE/openspec/config.yaml" <<'EOF'
   model_standard: "claude-opus-5-custom"
   model_deep: "claude-opus-5-custom"
   model_max: "claude-opus-5-custom"
+  model_deep_fallback: "claude-opus-5-custom"
+  model_max_fallback: "claude-opus-5-custom"
 EOF
   mkdir -p "$STORE/openspec/roles"
   printf 'Check every scenario in the delta spec has a named test.\n' > "$STORE/openspec/roles/critic.md"

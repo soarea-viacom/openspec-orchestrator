@@ -1033,19 +1033,23 @@ get a different reader is the tier one above the generator's, up the
 ladder `mechanical < standard < deep < max`: a `standard` implementer is
 verified at `deep`, a `deep` proposer is critiqued at `max`. Only when the
 generator already sits at `max`, where nothing stronger exists, does the
-tier one below (`deep`, the second strongest) review instead. If the
-store's `model_*` config maps that neighbouring tier onto the generator's
-own model, the command errors — unless the store sets
-`orchestration.checker_effort` (e.g. `high`): then the same model is
-accepted as the checker, and `model verify|critic` and `next` print an
-`effort:` line after the model for the dispatch to apply. The different
-configuration is what separates the two reads in that case — the fresh
-context and the input contract below, which every checker gets, plus the
-higher effort. Hosts whose agent dispatch cannot set effort per agent
-should leave `checker_effort` unset and keep distinct models. Codex
-offers three GPT levels for four tiers, and Cursor documents few ids until
-`models refresh` lists more, so `deep` and `max` share a default there:
-such a store sets `checker_effort` or maps `model_max`. The generator's tier is read from its session
+tier one below (`deep`, the second strongest) review instead. If that
+neighbouring tier's default — from the store's `model_*` config or the
+host's catalogue — is the generator's own model, the checker runs on the
+tier's fallback model instead (another family, so another reader), and
+`next` prints no `fallback_model:` for it. Only when the default and the
+fallback both resolve to the generator's model does the command error —
+unless the store sets `orchestration.checker_effort` (e.g. `high`): then
+the same model is accepted as the checker, and `model verify|critic` and
+`next` print an `effort:` line after the model for the dispatch to apply.
+The different configuration is what separates the two reads in that case
+— the fresh context and the input contract below, which every checker
+gets, plus the higher effort. Hosts whose agent dispatch cannot set effort
+per agent should leave `checker_effort` unset and keep distinct models.
+Codex offers three GPT levels for four tiers, and Cursor documents few ids
+until `models refresh` lists more, so `deep` and `max` share a default
+there and a `deep` proposer's critic runs on `max`'s fallback (`gpt-6.1-sol`
+on Codex). The generator's tier is read from its session
 entry (`tier=` on the last `applying`/`checking` entry for Verify, the
 last `proposed` entry for the critic); an entry without a tier is inferred
 from its model against the tier table, and with no history at all the
@@ -1087,6 +1091,8 @@ Defaults today (`model get` prints both):
 
 The fallback is an availability escape, not a second opinion: it may be the
 generator's own model, which the `fallback 1` session entry makes visible.
+The one exception is a checker whose tier default is the generator's model:
+it runs on the fallback from the start, as the only other reader available.
 
 `none` runs no model — it's plain bash bookkeeping (`scripts/run-change`
 itself), never a task dispatched to an agent.

@@ -132,8 +132,9 @@
   (`implementer_tier`/`implementer_model` read the last
   `applying`/`checking` session entry) and Propose's critic vs. the
   proposer (`proposer_tier`/`proposer_model` read the last `proposed`
-  entry). Both go through `checker_pick` (`scripts/lib.sh`), which errors
-  if the chosen tier resolves to the generator's own model id. Exposed as
+  entry). Both go through `checker_pick` (`scripts/lib.sh`): the chosen
+  tier's default model, or its fallback when the default is the generator's
+  own model id, erroring only when both are. Exposed as
   `scripts/run-change model verify|critic --store <slug> --name <change>`.
 - **Tier ladder**: `mechanical`, `standard`, `deep`, `max`, weakest first
   (`TIERS` in `scripts/lib.sh`). `max` is reached only as a checker tier.

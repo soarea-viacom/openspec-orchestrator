@@ -149,13 +149,18 @@ check_out "model verify for a deep implementer goes to max" "claude-fable-5-1" $
 cat >> "$STORE/openspec/config.yaml" <<'EOF'
   model_max: "claude-opus-5-custom"
 EOF
-check_err "model verify errors when the tier above resolves to the implementer's model" "resolves to the implementer's own model" $RC model verify --store teststore --name feat-verify
+check_out "model verify runs on max's fallback when max resolves to the implementer's model" "claude-opus-5-5" $RC model verify --store teststore --name feat-verify
+cat >> "$STORE/openspec/config.yaml" <<'EOF'
+  model_max_fallback: "claude-opus-5-custom"
+  model_deep_fallback: "claude-opus-5-custom"
+EOF
+check_err "model verify errors when the tier above and its fallback both resolve to the implementer's model" "both resolve to the implementer's own model" $RC model verify --store teststore --name feat-verify
 
 # generator/checker split at Propose: the critic is one tier above the proposer
 $RC state init --store teststore --name feat-critic
 check_out "state init has propose_rounds" "propose_rounds: 0" $RC state get --store teststore --name feat-critic
 $RC session append --store teststore --name feat-critic role worker phase proposed tier deep model claude-opus-5-custom transcript_id t1
-check_err "model critic errors when max resolves to the proposer's model" "resolves to the proposer's own model" $RC model critic --store teststore --name feat-critic
+check_err "model critic errors when max and its fallback resolve to the proposer's model" "both resolve to the proposer's own model" $RC model critic --store teststore --name feat-critic
 $RC session append --store teststore --name feat-critic role worker phase proposed tier deep model some-other-model transcript_id t2
 check_out "model critic uses max for a deep proposer" "claude-opus-5-custom" $RC model critic --store teststore --name feat-critic
 $RC session append --store teststore --name feat-critic role worker phase applying tier standard model claude-opus-5-custom transcript_id t3
@@ -163,7 +168,7 @@ check_out "model critic ignores non-proposed entries" "claude-opus-5-custom" $RC
 $RC session append --store teststore --name feat-critic role worker phase proposed tier max model claude-fable-5-1 transcript_id t4
 check_out "model critic for a max proposer drops to deep, the second highest" "claude-opus-5-custom" $RC model critic --store teststore --name feat-critic
 $RC session append --store teststore --name feat-critic role worker phase proposed tier max model claude-opus-5-custom transcript_id t5
-check_err "model critic errors when deep resolves to a max proposer's model" "resolves to the proposer's own model" $RC model critic --store teststore --name feat-critic
+check_err "model critic errors when deep and its fallback resolve to a max proposer's model" "both resolve to the proposer's own model" $RC model critic --store teststore --name feat-critic
 $RC session append --store teststore --name feat-critic role worker phase proposed tier standard model claude-sonnet-5 transcript_id t6
 check_out "model critic first line is the bare model id" "claude-opus-5-custom" bash -c "$RC model critic --store teststore --name feat-critic | sed -n 1p"
 check_out "model critic contract mentions input and seam" "input:" $RC model critic --store teststore --name feat-critic
@@ -195,7 +200,7 @@ check_out "status shows initiative tree" "init-a" $RC status --store teststore
 check_out "status shows started child phase" "feat-a" $RC status --store teststore
 check_out "status shows unstarted child" "not-started" $RC status --store teststore
 $RC session append --store teststore --name init-a role worker phase proposed tier deep model claude-opus-5-custom transcript_id t9
-check_err "model critic works for an initiative name" "resolves to the proposer's own model" $RC model critic --store teststore --name init-a
+check_err "model critic works for an initiative name" "both resolve to the proposer's own model" $RC model critic --store teststore --name init-a
 $RC session append --store teststore --name init-a role worker phase proposed tier deep model claude-opus-5-other transcript_id t10
 check_out "model critic for an initiative (no change state file) prints the contract" "input:" $RC model critic --store teststore --name init-a
 check_err "initiative merged refuses unlisted child" "not a child" $RC initiative merged --store teststore --name init-a --child feat-zzz --commit abc
