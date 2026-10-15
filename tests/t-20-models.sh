@@ -60,6 +60,8 @@ $RC session append --store store-cx --name feat-cx role proposer phase proposed 
 check_line "model critic on default Codex runs a deep proposer's critic on max's fallback" "gpt-6.1-sol" bash -c "$RC model critic --store store-cx --name feat-cx | sed -n 1p"
 check_out "next on default Codex dispatches that critic" "model: gpt-6.1-sol" $RC next --store store-cx --name feat-cx
 check_not "next prints no fallback_model when the checker already runs on it" "fallback_model:" $RC next --store store-cx --name feat-cx
+check_line "next names the agent pinned to the checker's model, not the tier's" "agent: openspec-critic-standard" $RC next --store store-cx --name feat-cx
+check_line "the tier line still says max" "tier: max" $RC next --store store-cx --name feat-cx
 mkstore store-oc >/dev/null <<'EOF'
 orchestration:
   tool: opencode

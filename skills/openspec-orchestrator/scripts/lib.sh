@@ -1117,13 +1117,20 @@ pillars_trivial() {
 # dispatches this role as: one per role and tier, generated per tool with
 # that tier's default model pinned (tools/build-agents.sh). The model is
 # also passed on the dispatch, which wins where the host supports it.
-# role_agent <slug> <role> <tier> -> the installed agent's name. OpenCode
-# names an agent by its file, and Atlas files it under the catalog key,
-# which carries the -opencode suffix; tools/install.sh matches that.
+# role_agent <slug> <role> <tier> [model] -> the installed agent's name.
+# Agents pin their tier's default model, and on hosts without per-dispatch
+# model selection the file is what sets it, so a dispatch running on another
+# tier's default (a checker on its fallback) names that tier's agent. OpenCode
+# names an agent by its file, and Atlas files it under the catalog key, which
+# carries the -opencode suffix; tools/install.sh matches that.
 role_agent() {
   local tool; tool="$(host_tool "$1")" || return 1
+  local tier="$3" t
+  if [ -n "${4:-}" ] && [ "$(model_for_tier "$1" "$3" 2>/dev/null)" != "$4" ]; then
+    for t in $TIERS; do [ "$(model_for_tier "$1" "$t" 2>/dev/null)" = "$4" ] && { tier="$t"; break; }; done
+  fi
   local suffix=""; [ "$tool" != opencode ] || suffix="-opencode"
-  echo "openspec-$2-$3$suffix"
+  echo "openspec-$2-$tier$suffix"
 }
 
 # emit_fallback <slug> <tier> <model> -> `fallback_model:` for a model-bearing
@@ -1141,7 +1148,7 @@ emit_role_lines() {
   printf 'prompt: %s\n' "$p"
   local ov; ov="$(role_overlay "$1" "$r")"
   [ -n "$ov" ] && printf 'overlay: %s\n' "$ov"
-  printf 'agent: %s\n' "$(role_agent "$1" "$r" "$3")"
+  printf 'agent: %s\n' "$(role_agent "$1" "$r" "$3" "${4:-}")"
   return 0
 }
 
@@ -1159,7 +1166,7 @@ next_action_applying() {
     emit_fallback "$slug" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
-    emit_role_lines "$slug" "$1" "$2"
+    emit_role_lines "$slug" "$1" "$2" "$3"
   }
   local ceffort; ceffort="$(checker_effort "$slug")"
 
@@ -1364,7 +1371,7 @@ next_action() {
     emit_fallback "$slug" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
-    emit_role_lines "$slug" "$1" "$2"
+    emit_role_lines "$slug" "$1" "$2" "$3"
   }
   fix_tier() { # tier for fix round number (1-based)
     case "$1" in 1) echo standard ;; 2) echo standard ;; *) echo deep ;; esac
@@ -1451,7 +1458,7 @@ next_action() {
           printf 'also_prompt: %s\n' "$vp"
           local vov; vov="$(role_overlay "$slug" verifier)"
           [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
-          printf 'also_agent: %s\n' "$(role_agent "$slug" verifier "$vt")"
+          printf 'also_agent: %s\n' "$(role_agent "$slug" verifier "$vt" "$vm")"
           [ -n "$vt" ] && { vfb="$(fallback_for_tier "$slug" "$vt")"; [ "$vfb" = "$vm" ] || printf 'also_fallback_model: %s\n' "$vfb"; }
           emit_effort ;;
         red)

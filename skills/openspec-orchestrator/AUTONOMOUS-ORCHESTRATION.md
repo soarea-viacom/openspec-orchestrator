@@ -1156,8 +1156,10 @@ for the critic); `medium` for unit critics and workers, whose cost is turns,
 not thinking — and a **tool allowlist** on Claude Code: checkers get no
 `Edit` (they write one report file, so they are not read-only either),
 nobody gets `Agent` (the orchestrator owns dispatch). `next` prints `agent:`
-beside `model:` (on OpenCode the name keeps the `-opencode` suffix, which is
-how that tool files it). Where the host takes a model per dispatch (Claude
+beside `model:`, naming the agent whose pinned model is the one dispatched —
+a checker running on its tier's fallback gets the agent of the tier that
+model is the default of (on OpenCode the name keeps the `-opencode` suffix,
+which is how that tool files it). Where the host takes a model per dispatch (Claude
 Code) the orchestrator passes both; elsewhere the pinned model runs, so a
 store's `model_<tier>` override or a `models refresh` result changes what
 `next` prints, not the installed file. Cursor, Copilot and OpenCode carry no
