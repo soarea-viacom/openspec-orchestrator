@@ -94,6 +94,25 @@ EOF
 PATH="$TMP/fakebin:$PATH" $RC models refresh --store store-cur >/dev/null
 check "cursor refresh reduces effort and thinking variants to bare ids" bash -c "! grep -qE -- '-(medium|high|thinking|fast)\$' '$TMP/store-cur/.orchestration/models.cursor.txt' && grep -qx claude-sonnet-5-5 '$TMP/store-cur/.orchestration/models.cursor.txt' && grep -qx gpt-5.6-sol '$TMP/store-cur/.orchestration/models.cursor.txt'"
 check_out "cursor standard resolves from the refreshed list" "claude-sonnet-5-5" $RC model get --store store-cur --tier standard
+mkdir -p "$TMP/failbin"; printf '#!/bin/sh\nexit 1\n' > "$TMP/failbin/agent"; chmod +x "$TMP/failbin/agent"
+cur_list="$(cat "$TMP/store-cur/.orchestration/models.cursor.txt")"
+check_fails "models refresh fails when the tool's listing fails" env PATH="$TMP/failbin:$PATH" $RC models refresh --store store-cur
+check_err "models refresh names the failed listing" "model listing for cursor failed" env PATH="$TMP/failbin:$PATH" $RC models refresh --store store-cur
+check "a failed refresh leaves the previous list untouched" test "$cur_list" = "$(cat "$TMP/store-cur/.orchestration/models.cursor.txt")"
+# Copilot ids contain spaces and must survive every pick
+mkstore store-cp >/dev/null <<'EOF'
+orchestration:
+  tool: copilot
+  gate_quick: "true"
+  gate_full: "true"
+EOF
+mkchange store-cp feat-cp phase checking last_gate_result green
+$RC session append --store store-cp --name feat-cp role worker phase applying tier standard model "Claude Sonnet 5.5" transcript_id c1
+check_line "model verify keeps a Copilot id with spaces whole" "Claude Opus 5.5" bash -c "$RC model verify --store store-cp --name feat-cp | sed -n 1p"
+check_line "next prints the whole Copilot id as model:" "model: Claude Opus 5.5" $RC next --store store-cp --name feat-cp
+check_not "next leaks no part of the id into reason:" "; Opus" $RC next --store store-cp --name feat-cp
+$RC session append --store store-cp --name feat-cp role proposer phase proposed tier deep model "Claude Opus 5.5" transcript_id c2
+check_line "model critic keeps a Copilot id with spaces whole" "Claude Fable 5.1" bash -c "$RC model critic --store store-cp --name feat-cp | sed -n 1p"
 check_out "next prints a fallback_model" "fallback_model: " $RC next --store store-host --name feat-host
 check_out "next names the per-tier agent" "agent: openspec-" $RC next --store store-host --name feat-host
 

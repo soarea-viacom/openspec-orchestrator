@@ -926,7 +926,8 @@ tier_of_model() {
   return 0
 }
 
-# checker_pick <store-slug> <gen-tier> <gen-model> <label> -> "<tier> <model>"
+# checker_pick <store-slug> <gen-tier> <gen-model> <label> -> "<tier>\t<model>"
+# (tab-separated: Copilot ids contain spaces)
 # for the generator/checker split. The checker is the tier one ABOVE the
 # generator's: the review is done by a stronger model than the one whose
 # work it grades. Only when the generator already sits at the top tier,
@@ -961,7 +962,7 @@ checker_pick() {
   [ "$idx" -ge 0 ] || { echo "unknown tier '$gtier' for $label" >&2; return 1; }
   local cand=$((idx + 1)); [ "$cand" -lt "${#ladder[@]}" ] || cand=$((idx - 1))
   local t="${ladder[$cand]}" m; m="$(checker_model "$slug" "$t" "$gen" "$label")" || return 1
-  echo "$t $m"
+  printf '%s\t%s\n' "$t" "$m"
 }
 
 # unit_tier <store-slug> <name> <unit> -> deep for a foundation unit — one
@@ -1030,23 +1031,23 @@ verify_pick() {
   local t m; t="$(implementer_tier "$1" "$2")"; m="$(implementer_model "$1" "$2")"
   [ -n "$t$m" ] || t=standard
   local pick; pick="$(checker_pick "$1" "$t" "$m" implementer)" || return 1
-  local above="${pick%% *}" prev; prev="$(last_session_field "$1" "$2" verify tier)"
+  local above="${pick%%$'\t'*}" prev; prev="$(last_session_field "$1" "$2" verify tier)"
   local chosen="$above" note=""
   if [ "$(tier_index "$VERIFY_FLOOR")" -gt "$(tier_index "$chosen")" ]; then chosen="$VERIFY_FLOOR"; note="floor: $VERIFY_FLOOR"; fi
   if [ -n "$prev" ] && [ "$(tier_index "$prev")" -gt "$(tier_index "$chosen")" ]; then chosen="$prev"; note="floor: previous round ran at $prev"; fi
   local model; model="$(checker_model "$1" "$chosen" "$m" implementer)" || return 1
-  echo "$chosen $model${note:+ $note}"
+  printf '%s\t%s%s\n' "$chosen" "$model" "${note:+$'\t'$note}"
 }
-verify_note() { verify_pick "$1" "$2" 2>/dev/null | cut -d' ' -f3-; }
+verify_note() { verify_pick "$1" "$2" 2>/dev/null | cut -f3-; }
 critic_pick() {
   local t m; t="$(proposer_tier "$1" "$2")"; m="$(proposer_model "$1" "$2")"
   [ -n "$t$m" ] || t=deep
   checker_pick "$1" "$t" "$m" proposer
 }
-verify_model() { verify_pick "$1" "$2" | cut -d' ' -f2; }
-verify_tier()  { verify_pick "$1" "$2" | cut -d' ' -f1; }
-critic_model() { critic_pick "$1" "$2" | cut -d' ' -f2; }
-critic_tier()  { critic_pick "$1" "$2" | cut -d' ' -f1; }
+verify_model() { verify_pick "$1" "$2" | cut -f2; }
+verify_tier()  { verify_pick "$1" "$2" | cut -f1; }
+critic_model() { critic_pick "$1" "$2" | cut -f2; }
+critic_tier()  { critic_pick "$1" "$2" | cut -f1; }
 
 # --- next_action: the orchestration policy as one function -----------------
 # next_action <store-slug> <change-name> prints the single next step for a
@@ -1276,7 +1277,7 @@ next_action_applying() {
     # leaf green at the same time get different critics.
     local first; first="${green_units%% *}"
     local pick; pick="$(unit_critic_pick "$slug" "$name" "$first")" || return 1
-    local ct="${pick%% *}" cm="${pick#* }" same=""
+    local ct="${pick%%$'\t'*}" cm="${pick#*$'\t'}" same=""
     for u in $green_units; do
       [ "$(unit_logged_tier "$slug" "$name" "$u")" = "$(unit_logged_tier "$slug" "$name" "$first")" ] && same="$same$u "
     done
