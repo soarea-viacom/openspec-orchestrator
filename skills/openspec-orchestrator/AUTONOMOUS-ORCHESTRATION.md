@@ -352,7 +352,7 @@ append`, never edited after the fact.
    existed), record `phase: applying`, and call `next` again — no worker
    is dispatched on this step. Implementation runs in **units**: each
    independent slice of the Propose step's seam list gets its own
-   worktree, branch, and Agent, reviewed and merged on its own before
+   worktree, branch, and subagent, reviewed and merged on its own before
    Check/Verify ever run.
 
    **Split.** With `units` empty, `next` returns `split` — tier `deep`
@@ -391,7 +391,7 @@ append`, never edited after the fact.
    orchestrator runs `unit create --unit <u>` for each (branches
    `change/<name>.<u>` off the tip of `change/<name>` into
    `<ws>/<name>.<u>`, refusing an unknown unit, a dep not yet `merged`, or
-   a dirty change worktree) and dispatches one Agent per unit into that
+   a dirty change worktree) and dispatches one subagent per unit into that
    worktree at the tier `unit_tiers` names for it — `deep` for a
    **foundation unit** (two or more units depend on it directly: it
    serialises the wave, and a defect in it costs every dependent a rerun),
@@ -799,7 +799,7 @@ action `next` also prints `prompt: <path>` right after `reason:`, then any
 `overlay:`, then `agent: openspec-<role>` (and `also_prompt:` /
 `also_overlay:` / `also_agent:` after `also_model:` on `check`) — the
 engine prompt for that role and the agent definition to dispatch it as
-(`subagent_type`); see **Role agents** and **Role overlays** above. Actions: `classify`,
+(by name, through the host's subagent mechanism); see **Role agents** and **Role overlays** above. Actions: `classify`,
 `grill` (tier `none` — the orchestrator runs the interview itself),
 `propose`, `critique`, `revise`, `gate0`, `apply` (tier `none` — bookkeeping only, no
 worker dispatched), `split`, `unit-spawn`, `unit-critique`, `unit-revise`,
@@ -1033,17 +1033,23 @@ get a different reader is the tier one above the generator's, up the
 ladder `mechanical < standard < deep < max`: a `standard` implementer is
 verified at `deep`, a `deep` proposer is critiqued at `max`. Only when the
 generator already sits at `max`, where nothing stronger exists, does the
-tier one below (`deep`, the second strongest) review instead. If the
-store's `model_*` config maps that neighbouring tier onto the generator's
-own model, the command errors — unless the store sets
-`orchestration.checker_effort` (e.g. `high`): then the same model is
-accepted as the checker, and `model verify|critic` and `next` print an
-`effort:` line after the model for the dispatch to apply. The different
-configuration is what separates the two reads in that case — the fresh
-context and the input contract below, which every checker gets, plus the
-higher effort. Hosts whose agent dispatch cannot set effort per agent
-(Claude Code's Agent tool today) should leave `checker_effort` unset and
-keep distinct models. The generator's tier is read from its session
+tier one below (`deep`, the second strongest) review instead. If that
+neighbouring tier's default — from the store's `model_*` config or the
+host's catalogue — is the generator's own model, the checker runs on the
+tier's fallback model instead (another family, so another reader), and
+`next` prints no `fallback_model:` for it. Only when the default and the
+fallback both resolve to the generator's model does the command error —
+unless the store sets `orchestration.checker_effort` (e.g. `high`): then
+the same model is accepted as the checker, and `model verify|critic` and
+`next` print an `effort:` line after the model for the dispatch to apply.
+The different configuration is what separates the two reads in that case
+— the fresh context and the input contract below, which every checker
+gets, plus the higher effort. Hosts whose agent dispatch cannot set effort
+per agent should leave `checker_effort` unset and keep distinct models.
+Codex offers three GPT levels for four tiers, and Cursor documents few ids
+until `models refresh` lists more, so `deep` and `max` share a default
+there and a `deep` proposer's critic runs on `max`'s fallback (`gpt-6.1-sol`
+on Codex). The generator's tier is read from its session
 entry (`tier=` on the last `applying`/`checking` entry for Verify, the
 last `proposed` entry for the critic); an entry without a tier is inferred
 from its model against the tier table, and with no history at all the
@@ -1064,16 +1070,29 @@ caller that wants only the id pipes the output through `| head -n1`.
 Each tier maps to a concrete model, resolved via `scripts/run-change model
 get --store <slug> --tier <tier>` — the store's `openspec/config.yaml`
 (`orchestration.model_mechanical` / `model_standard` / `model_deep` /
-`model_max`) if
-set, else the engine's default table (`model_for_tier` in
-`scripts/lib.sh`):
+`model_max`, and `model_<tier>_fallback`) if set, else the model
+catalogue `models.tsv` for the store's `orchestration.tool`, read by
+`model_pick` in `scripts/lib.sh`. Each tier lists model families in
+preference order: the first family with an available model is the default,
+the next is the fallback, and within a family the newest version wins
+(compared per dotted part, so 6.10 beats 6.9). The catalogue holds only ids
+confirmed in each tool's docs; `models refresh` (Cursor, Codex, OpenCode) records
+what the tool actually offers, which drops ids it lacks and promotes a newer
+listed version of a known family without a catalogue edit.
 
-| tier         | default model               |
-|--------------|------------------------------|
-| `mechanical` | `claude-haiku-4-5-20251001` |
-| `standard`   | `claude-sonnet-5`           |
-| `deep`       | `claude-opus-5`             |
-| `max`        | `claude-fable-5-1`          |
+Defaults today (`model get` prints both):
+
+| tier | claude-code | cursor | copilot | codex | opencode |
+|---|---|---|---|---|---|
+| `mechanical` | haiku-5-5 / sonnet-5-5 | gpt-5.6-sol / opus-5 | Haiku 5.5 / GPT-6 Luna | gpt-6-luna / gpt-6.1-sol | haiku-5-5 / gpt-6-luna |
+| `standard` | sonnet-5-5 / opus-5-5 | gpt-5.6-sol / opus-5 | Sonnet 5.5 / GPT-6.1 Sol | gpt-6.1-sol / gpt-6-astra | sonnet-5-5 / gpt-6.1-sol |
+| `deep` | opus-5-5 / fable-5-1 | opus-5 / gpt-5.6-sol | Opus 5.5 / GPT-6 Astra | gpt-6-astra / gpt-6.1-sol | opus-5-5 / gpt-6-astra |
+| `max` | fable-5-1 / opus-5-5 | opus-5 / gpt-5.6-sol | Fable 5.1 / GPT-6 Astra | gpt-6-astra / gpt-6.1-sol | fable-5-1 / gpt-6-astra |
+
+The fallback is an availability escape, not a second opinion: it may be the
+generator's own model, which the `fallback 1` session entry makes visible.
+The one exception is a checker whose tier default is the generator's model:
+it runs on the fallback from the start, as the only other reader available.
 
 `none` runs no model — it's plain bash bookkeeping (`scripts/run-change`
 itself), never a task dispatched to an agent.
@@ -1100,7 +1119,7 @@ full design and why the mapping lives only in the resolved root's `openspec/conf
 (`orchestration.stage_skills`), never in a skill's own frontmatter, and never behind any
 other switch:
 
-- **`plan`** — at most one name. If set, dispatch that skill (via the `Skill` tool, not a
+- **`plan`** — at most one name. If set, dispatch that skill (as a skill, not a
   bare model call) to draft the delta spec and seam list **instead of** the deep-tier
   model — this *replaces* the default drafter, it does not add to it. If unset, Propose
   runs exactly as described in Phases step 3: deep tier, no skill involved.
@@ -1123,25 +1142,36 @@ is, not something this engine detects in advance.
 
 ### Role agents (effort and tools per role, shipped beside the skill)
 
-Each role is also a Claude Code agent definition, `agents/openspec-<role>/AGENT.md`
-in this repository and installed by Atlas as `openspec-proposer`,
-`openspec-critic`, `openspec-verifier`, `openspec-unit-critic`,
-`openspec-worker`. The body is the role prompt verbatim (`tools/build-agents.sh`
-regenerates it; a test fails on drift). The frontmatter adds the two things
-a prompt cannot carry: **effort** — `high` for the proposer, the critic and
-Verify, whose errors cost the most downstream and whose thinking share
-was already the highest at `medium` (measured: 44% for the critic);
-`medium` for unit critics and workers, whose cost is turns, not thinking —
-and a **tool allowlist**: checkers get no `Edit`, nobody gets `Agent`
-(the orchestrator owns dispatch). The model is not in the file: `next`
-prints `agent:` beside `model:`, and the orchestrator passes both on the
-Agent call, so one definition serves every tier. Effort is not settable
-per call any other way; this is the host's only lever for it. When the
-agent is not installed (Step 0 offers to install it), dispatch a general
-agent with the prompt text instead — same instructions, session effort.
-This is also what makes **same model, different configuration** real for
-a checker: a store that sets `orchestration.checker_effort` can run Verify
-on the implementer's model at `high` through its agent definition.
+Each role is also an agent definition, generated by `tools/build-agents.sh`
+from the role prompt (a test fails on drift): one per tool and tier,
+`agents/<tool>/openspec-<role>-<tier>/AGENT.md`, catalogued as
+`openspec-<role>-<tier>-<tool>` and installed by Atlas or `tools/install.sh
+--tool <tool>`. The body is the role prompt verbatim. The frontmatter pins
+the tier's default model from `models.tsv` (Copilot takes the fallback too,
+as a priority list; `tools/install.sh` writes Codex's as TOML keys) plus
+what each host can express: **effort** on Claude Code and Codex — `high` for
+the proposer, the critic and Verify, whose errors cost the most downstream
+and whose thinking share was already the highest at `medium` (measured: 44%
+for the critic); `medium` for unit critics and workers, whose cost is turns,
+not thinking — and a **tool allowlist** on Claude Code: checkers get no
+`Edit` (they write one report file, so they are not read-only either),
+nobody gets `Agent` (the orchestrator owns dispatch). `next` prints `agent:`
+beside `model:`, naming the agent whose pinned model is the one dispatched —
+a checker running on its tier's fallback gets the agent of the tier that
+model is the default of (on OpenCode the name keeps the `-opencode` suffix,
+which is how that tool files it). Where the host takes a model per dispatch (Claude
+Code) the orchestrator passes both; elsewhere the pinned model runs, so a
+store's `model_<tier>` override or a `models refresh` result changes what
+`next` prints, not the installed file. Cursor, Copilot and OpenCode carry no
+effort or tool policy in the frontmatter, so on those hosts the role
+prompt's own rules are what hold the role boundary. The legacy unsuffixed
+five (`agents/openspec-<role>/AGENT.md`) remain for Claude Code installs
+that predate the per-tier set. When the agent is not installed (Step 0
+offers to install it), dispatch a general agent with the prompt text
+instead — same instructions, session effort. This is also what makes **same
+model, different configuration** real for a checker: a store that sets
+`orchestration.checker_effort` can run Verify on the implementer's model at
+`high` through its agent definition.
 
 ### Role overlays (project notes for a role, kept in the store)
 

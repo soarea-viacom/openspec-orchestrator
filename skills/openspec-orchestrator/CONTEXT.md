@@ -121,9 +121,10 @@
   `standard`, `deep` — the `none` tier runs no model) to a concrete model
   id, read via `scripts/run-change model get --store <slug> --tier
   <tier>`. Resolved from the store's `openspec/config.yaml`
-  (`orchestration.model_<tier>`) if set, else the default table in
-  `model_for_tier` (`scripts/lib.sh`) — the only place a specific model id
-  is hardcoded in the engine.
+  (`orchestration.model_<tier>`, `model_<tier>_fallback`) if set, else
+  `models.tsv` for the store's `orchestration.tool` — the only place model
+  ids are named. Two models per tier (default, fallback); newest version per
+  family wins.
 - **Generator/checker split**: the rule that a checker runs one tier
   above the generator whose output it judges — `mechanical < standard <
   deep < max` — dropping to the tier below only when the generator is
@@ -131,8 +132,9 @@
   (`implementer_tier`/`implementer_model` read the last
   `applying`/`checking` session entry) and Propose's critic vs. the
   proposer (`proposer_tier`/`proposer_model` read the last `proposed`
-  entry). Both go through `checker_pick` (`scripts/lib.sh`), which errors
-  if the chosen tier resolves to the generator's own model id. Exposed as
+  entry). Both go through `checker_pick` (`scripts/lib.sh`): the chosen
+  tier's default model, or its fallback when the default is the generator's
+  own model id, erroring only when both are. Exposed as
   `scripts/run-change model verify|critic --store <slug> --name <change>`.
 - **Tier ladder**: `mechanical`, `standard`, `deep`, `max`, weakest first
   (`TIERS` in `scripts/lib.sh`). `max` is reached only as a checker tier.
@@ -192,7 +194,7 @@
   slower belongs in `gate_full`, which runs once per Check. The full gate
   includes the project's dead-code pass (`knip`, `vulture`, or
   equivalent); for this engine that is the no-caller function scan in
-  `tests/run.sh`.
+  `tests/t-00-static.sh`.
 - **Trunk preflight**: `scripts/run-change gate run --store <slug>
   --project <path> --mode full --trunk` — runs `gate_full` in a temporary
   detached worktree of the trunk ref, writes no state, and removes the
@@ -268,11 +270,14 @@
   terms and decisions into the Project glossary and ADRs; an external-mode
   guard compares `git status --porcelain` before and after; nothing is
   ever committed.
-- **Role agent**: the Claude Code agent definition for a role,
-  `openspec-<role>` (`agents/openspec-<role>/AGENT.md` here, installed by
-  Atlas), body = the role prompt verbatim, frontmatter = effort (`high`
-  proposer/critic/verifier, `medium` unit-critic/worker) and tool
-  allowlist (no `Edit` for checkers, no `Agent` for anyone). `next` prints
+- **Role agent**: the agent definition for a role at a tier on a host tool,
+  `openspec-<role>-<tier>` (`agents/<tool>/openspec-<role>-<tier>/AGENT.md`
+  here, catalogued as `openspec-<role>-<tier>-<tool>`; on OpenCode the
+  installed name keeps that suffix), body = the role prompt verbatim,
+  frontmatter = the tier's default model from `models.tsv` plus what the
+  host can express: effort (`high` proposer/critic/verifier, `medium`
+  unit-critic/worker) on Claude Code and Codex, the tool allowlist (no
+  `Edit` for checkers, no `Agent` for anyone) on Claude Code. `next` prints
   `agent:` beside `model:`; the orchestrator passes both on dispatch.
 - **Role prompt**: the engine's own dispatch text for a role,
   `scripts/roles/<role>.md` — one per `ROLES` entry (`proposer`, `critic`,

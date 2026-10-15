@@ -231,34 +231,91 @@ run_gate() {
   return "$status"
 }
 
-# model_for_tier <store-slug> <tier> -> model id for mechanical|standard|deep|max
-# (the `none` tier runs no model — it's plain bash bookkeeping). Reads
-# orchestration.model_<tier> from the store's config first; falls back to
-# the default table below when unset. The default table is the only place
-# in the engine that names a specific model id — update it here, not
-# per-callsite, when the current-best model changes.
+# model_for_tier <store-slug> <tier> [rank] -> model id for
+# mechanical|standard|deep|max (the `none` tier runs no model — it's plain
+# bash bookkeeping). rank 1 is the default, rank 2 the fallback dispatched
+# when the default is unavailable. orchestration.model_<tier> (rank 1) and
+# model_<tier>_fallback (rank 2) win; otherwise model_pick reads models.tsv,
+# the only place the engine names model ids.
 model_for_tier() {
-  local slug="$1" tier="$2"
-  local cfg
-  cfg="$(store_config "$slug")"
-  local key="model_${tier}"
-  local v
-  v="$(awk -v key="$key" '
-    /^orchestration:/ { f=1; next }
-    f && /^[a-zA-Z]/ { exit }
-    f && index($0, key":") { sub(".*"key":[ ]*", ""); gsub(/^"|"$/, ""); print; exit }
-  ' "$cfg" 2>/dev/null || true)"
-  if [ -n "$v" ]; then
-    echo "$v"
-    return 0
-  fi
-  case "$tier" in
-    mechanical) echo "claude-haiku-4-5-20251001" ;;
-    standard)   echo "claude-sonnet-5" ;;
-    deep)       echo "claude-opus-5" ;;
-    max)        echo "claude-fable-5-1" ;;
-    *)          echo "unknown tier: $tier" >&2; return 1 ;;
-  esac
+  local slug="$1" tier="$2" rank="${3:-1}"
+  case "$tier" in mechanical|standard|deep|max) ;; *) echo "unknown tier: $tier" >&2; return 1 ;; esac
+  local tool; tool="$(host_tool "$slug")" || return 1
+  local key="model_${tier}"; [ "$rank" = 1 ] || key="model_${tier}_fallback"
+  local v; v="$(orch_scalar "$slug" "$key")"
+  [ -n "$v" ] && { echo "$v"; return 0; }
+  model_pick "$tool" "$tier" "$rank" "$(models_list_file "$slug" "$tool")"
+}
+# fallback_if_any <store-slug> <tier> -> the fallback, or nothing: a tier
+# left with one family after models refresh still dispatches on its default.
+fallback_if_any() { model_for_tier "$1" "$2" 2 2>/dev/null || true; }
+
+MODELS_TSV="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/models.tsv"
+
+# models_list_file <slug> <tool> -> path of the model list `models refresh`
+# wrote for this tool (may not exist).
+models_list_file() { echo "$(orchestration_dir "$1")/models.$2.txt"; }
+
+# model_pick <tool> <tier> <rank> [list-file] -> the rank-th family in the
+# tier's preference order, at that family's newest version. Versions compare
+# numerically per dotted part (3.10 > 3.9). With a list file (one id per
+# line, from the tool's own model listing) catalogue ids the tool does not
+# offer are dropped and a listed id matching a family's pattern competes on
+# version, so a release newer than the catalogue is used without an edit.
+# awk, not perl: next calls this five times and perl startup was most of
+# its wall time. The version is the pattern's first group; awk has no
+# captures, so it is cut out by stripping the text before and after it.
+model_pick() {
+  awk -F'\t' -v tool="$1" -v tier="$2" -v rank="$3" -v list="${4:-}" '
+    function vcmp(a, b,   x, y, n, m, i, d) {
+      n = split(a, x, "."); m = split(b, y, "."); if (m > n) n = m
+      for (i = 1; i <= n; i++) { d = (x[i] + 0) - (y[i] + 0); if (d) return d }
+      return 0
+    }
+    function keep(fam, v, id,   d) {
+      d = (fam in bestv) ? vcmp(v, bestv[fam]) : 1
+      if (d > 0 || (d == 0 && id < bestid[fam])) { bestv[fam] = v; bestid[fam] = id }
+    }
+    function split_group(fam, p,   i, depth, o, c) {
+      for (i = 1; i <= length(p); i++) {
+        if (substr(p, i, 1) == "\\") { i++; continue }
+        if (substr(p, i, 1) == "(") { if (!o) o = i; depth++ }
+        else if (substr(p, i, 1) == ")" && o) { depth--; if (!depth) { c = i; break } }
+      }
+      pre[fam] = o ? substr(p, 1, o - 1) : p
+      suf[fam] = c ? substr(p, c + 1) : ""
+    }
+    function version_of(fam, id,   v) {
+      v = id; sub(pre[fam], "", v); sub(suf[fam], "", v); gsub(/[-_]/, ".", v); return v
+    }
+    BEGIN {
+      if (list != "") while ((getline l < list) > 0) {
+        gsub(/^[ \t]+|[ \t]+$/, "", l); if (l != "") { listed[l] = 1; have = 1 }
+      }
+    }
+    /^[ \t]*(#|$)/ || $2 != tool { next }
+    $1 == "tier" && $3 == tier { for (i = 4; i <= NF; i++) if ($i != "") order[++n] = $i }
+    $1 == "family" { re[$3] = $4; split_group($3, $4) }
+    $1 == "model" && (!have || ($5 in listed)) { seen[$3, $5] = 1; keep($3, $4, $5) }
+    END {
+      if (!n) { print "no tier " tier " for tool " tool " in " FILENAME > "/dev/stderr"; exit 1 }
+      if (have) for (id in listed) for (fam in re)
+        if (id ~ re[fam] && !((fam, id) in seen)) keep(fam, version_of(fam, id), id)
+      for (i = 1; i <= n; i++) if (order[i] in bestid) picks[++p] = bestid[order[i]]
+      if (rank + 0 > p) { print "tier " tier " on " tool " has no available model at rank " rank > "/dev/stderr"; exit 1 }
+      print picks[rank + 0]
+    }
+  ' "$MODELS_TSV"
+}
+
+# host_tool <store-slug> -> orchestration.tool, the agent tool driving this
+# store; unset means claude-code so stores written before the key keep
+# their per-dispatch model tiers.
+HOST_TOOLS="claude-code cursor copilot codex opencode"
+host_tool() {
+  local t h; t="$(orch_scalar "$1" tool)"; t="${t:-claude-code}"
+  for h in $HOST_TOOLS; do [ "$h" = "$t" ] && { echo "$t"; return 0; }; done
+  echo "unknown orchestration.tool '$t' (one of: $HOST_TOOLS)" >&2; return 1
 }
 
 # orch_scalar <store-slug> <key> -> orchestration.<key> as a bare scalar,
@@ -329,7 +386,7 @@ role_for_action() {
 # `plan`, if set, REPLACES the deep-tier drafter; `critic`/`test`, if
 # non-empty, STACK on top of the built-in tier/model checker — the caller
 # (never this function) is responsible for honoring that distinction and
-# for actually dispatching each name via the Skill tool.
+# for actually invoking each named skill.
 stage_skills() {
   local slug="$1" stage="$2"
   local cfg
@@ -824,11 +881,13 @@ session_append() {
 # last_session_field <store-slug> <change-name> <phase-regex> <field> -> that
 # field of the most recent session entry whose phase matches, empty if none.
 # The session log is the only record of who wrote what, and at which tier.
+# A value runs to the next " key=" token, not the next space: Copilot model
+# ids contain spaces.
 last_session_field() {
   local f; f="$(session_log_path "$1" "$2")"
   [ -f "$f" ] || return 0
   grep -E "phase=($3)" "$f" 2>/dev/null | tail -n1 \
-    | grep -o "$4=[^ ]*" | cut -d= -f2 || true
+    | { grep -o " $4=.*" || true; } | sed -E "s/^ $4=//; s/ [A-Za-z_]+=.*$//" || true
 }
 
 # advisor_calls <store-slug> <change-name> -> count of role=advisor session
@@ -871,7 +930,8 @@ tier_of_model() {
   return 0
 }
 
-# checker_pick <store-slug> <gen-tier> <gen-model> <label> -> "<tier> <model>"
+# checker_pick <store-slug> <gen-tier> <gen-model> <label> -> "<tier>\t<model>"
+# (tab-separated: Copilot ids contain spaces)
 # for the generator/checker split. The checker is the tier one ABOVE the
 # generator's: the review is done by a stronger model than the one whose
 # work it grades. Only when the generator already sits at the top tier,
@@ -880,6 +940,23 @@ tier_of_model() {
 # is a weak reviewer of its own output — so a store whose config maps that
 # neighbouring tier onto the generator's model is an error, never a silent
 # same-model review or a quiet drop to a weaker tier.
+# checker_model <store-slug> <tier> <gen-model> <label> -> the model a checker
+# at <tier> runs on: the tier's default unless that is the generator's own,
+# then the tier's fallback (a different family, so a different reader);
+# both colliding is an error unless checker_effort makes the same model a
+# different configuration. Codex and Cursor ship few ids, so deep and max
+# share a default there and the fallback is the normal route.
+checker_model() {
+  local slug="$1" t="$2" gen="$3" label="$4" m fb
+  m="$(model_for_tier "$slug" "$t")" || return 1
+  [ "$m" != "$gen" ] && { echo "$m"; return 0; }
+  fb="$(fallback_if_any "$slug" "$t")"
+  [ -n "$fb" ] && [ "$fb" != "$gen" ] && { echo "$fb"; return 0; }
+  [ -n "$(checker_effort "$slug")" ] && { echo "$m"; return 0; }
+  echo "checker tier $t and its fallback both resolve to the $label's own model ($gen) — map a different model in orchestration.model_* / model_${t}_fallback or set orchestration.checker_effort in $(store_config "$slug")" >&2
+  return 1
+}
+
 checker_pick() {
   local slug="$1" gtier="$2" gen="$3" label="$4"
   if [ -z "$gtier" ] && [ -n "$gen" ]; then gtier="$(tier_of_model "$slug" "$gen")"; fi
@@ -888,11 +965,8 @@ checker_pick() {
   for i in "${!ladder[@]}"; do [ "${ladder[$i]}" = "$gtier" ] && idx=$i; done
   [ "$idx" -ge 0 ] || { echo "unknown tier '$gtier' for $label" >&2; return 1; }
   local cand=$((idx + 1)); [ "$cand" -lt "${#ladder[@]}" ] || cand=$((idx - 1))
-  local t="${ladder[$cand]}" m; m="$(model_for_tier "$slug" "$t")"
-  [ "$m" != "$gen" ] && { echo "$t $m"; return 0; }
-  [ -n "$(checker_effort "$slug")" ] && { echo "$t $m"; return 0; }
-  echo "checker tier $t resolves to the $label's own model ($gen) — map a different model in orchestration.model_* or set orchestration.checker_effort in $(store_config "$slug")" >&2
-  return 1
+  local t="${ladder[$cand]}" m; m="$(checker_model "$slug" "$t" "$gen" "$label")" || return 1
+  printf '%s\t%s\n' "$t" "$m"
 }
 
 # unit_tier <store-slug> <name> <unit> -> deep for a foundation unit — one
@@ -961,26 +1035,23 @@ verify_pick() {
   local t m; t="$(implementer_tier "$1" "$2")"; m="$(implementer_model "$1" "$2")"
   [ -n "$t$m" ] || t=standard
   local pick; pick="$(checker_pick "$1" "$t" "$m" implementer)" || return 1
-  local above="${pick%% *}" prev; prev="$(last_session_field "$1" "$2" verify tier)"
+  local above="${pick%%$'\t'*}" prev; prev="$(last_session_field "$1" "$2" verify tier)"
   local chosen="$above" note=""
   if [ "$(tier_index "$VERIFY_FLOOR")" -gt "$(tier_index "$chosen")" ]; then chosen="$VERIFY_FLOOR"; note="floor: $VERIFY_FLOOR"; fi
   if [ -n "$prev" ] && [ "$(tier_index "$prev")" -gt "$(tier_index "$chosen")" ]; then chosen="$prev"; note="floor: previous round ran at $prev"; fi
-  local model; model="$(model_for_tier "$1" "$chosen")"
-  if [ "$model" = "$m" ] && [ -z "$(checker_effort "$1")" ]; then
-    echo "verify floor tier $chosen resolves to the implementer's own model ($m) — check orchestration.model_* in $(store_config "$1")" >&2; return 1
-  fi
-  echo "$chosen $model${note:+ $note}"
+  local model; model="$(checker_model "$1" "$chosen" "$m" implementer)" || return 1
+  printf '%s\t%s%s\n' "$chosen" "$model" "${note:+$'\t'$note}"
 }
-verify_note() { verify_pick "$1" "$2" 2>/dev/null | cut -d' ' -f3-; }
+verify_note() { verify_pick "$1" "$2" 2>/dev/null | cut -f3-; }
 critic_pick() {
   local t m; t="$(proposer_tier "$1" "$2")"; m="$(proposer_model "$1" "$2")"
   [ -n "$t$m" ] || t=deep
   checker_pick "$1" "$t" "$m" proposer
 }
-verify_model() { verify_pick "$1" "$2" | cut -d' ' -f2; }
-verify_tier()  { verify_pick "$1" "$2" | cut -d' ' -f1; }
-critic_model() { critic_pick "$1" "$2" | cut -d' ' -f2; }
-critic_tier()  { critic_pick "$1" "$2" | cut -d' ' -f1; }
+verify_model() { verify_pick "$1" "$2" | cut -f2; }
+verify_tier()  { verify_pick "$1" "$2" | cut -f1; }
+critic_model() { critic_pick "$1" "$2" | cut -f2; }
+critic_tier()  { critic_pick "$1" "$2" | cut -f1; }
 
 # --- next_action: the orchestration policy as one function -----------------
 # next_action <store-slug> <change-name> prints the single next step for a
@@ -1044,11 +1115,33 @@ pillars_trivial() {
 # emit_role_lines <slug> <action> -> for a role-bearing action prints
 # `prompt: <path>`, then `overlay: <path>` when the store has an overlay
 # for that role.
-# role_agent <role> -> the Claude Code agent definition the orchestrator
-# dispatches this role as (`subagent_type`), installed by Atlas beside the
-# skill. It carries the role's effort and tool allowlist; the model still
-# comes from the tier table, passed on the Agent call.
-role_agent() { echo "openspec-$1"; }
+# role_agent <role> <tier> -> the agent definition the orchestrator
+# dispatches this role as: one per role and tier, generated per tool with
+# that tier's default model pinned (tools/build-agents.sh). The model is
+# also passed on the dispatch, which wins where the host supports it.
+# role_agent <slug> <role> <tier> [model] -> the installed agent's name.
+# Agents pin their tier's default model, and on hosts without per-dispatch
+# model selection the file is what sets it, so a dispatch running on another
+# tier's default (a checker on its fallback) names that tier's agent. OpenCode
+# names an agent by its file, and Atlas files it under the catalog key, which
+# carries the -opencode suffix; tools/install.sh matches that.
+role_agent() {
+  local tool; tool="$(host_tool "$1")" || return 1
+  local tier="$3" t
+  if [ -n "${4:-}" ] && [ "$(model_for_tier "$1" "$3" 2>/dev/null)" != "$4" ]; then
+    for t in $TIERS; do [ "$(model_for_tier "$1" "$t" 2>/dev/null)" = "$4" ] && { tier="$t"; break; }; done
+  fi
+  local suffix=""; [ "$tool" != opencode ] || suffix="-opencode"
+  echo "openspec-$2-$tier$suffix"
+}
+
+# emit_fallback <slug> <tier> <model> -> `fallback_model:` for a model-bearing
+# tier, unless there is none or the dispatch already runs on it (checker_model).
+emit_fallback() {
+  case "$2" in none|"") return 0 ;; esac
+  local fb; fb="$(fallback_if_any "$1" "$2")"
+  [ -z "$fb" ] || [ "$fb" = "$3" ] || printf 'fallback_model: %s\n' "$fb"
+}
 
 emit_role_lines() {
   local r; r="$(role_for_action "$2")"
@@ -1057,7 +1150,7 @@ emit_role_lines() {
   printf 'prompt: %s\n' "$p"
   local ov; ov="$(role_overlay "$1" "$r")"
   [ -n "$ov" ] && printf 'overlay: %s\n' "$ov"
-  printf 'agent: %s\n' "$(role_agent "$r")"
+  printf 'agent: %s\n' "$(role_agent "$1" "$r" "$3" "${4:-}")"
   return 0
 }
 
@@ -1072,9 +1165,10 @@ next_action_applying() {
 
   _na_emit() { # action tier model reason [set_phase]
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
+    emit_fallback "$slug" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
-    emit_role_lines "$slug" "$1"
+    emit_role_lines "$slug" "$1" "$2" "$3"
   }
   local ceffort; ceffort="$(checker_effort "$slug")"
 
@@ -1194,7 +1288,7 @@ next_action_applying() {
     # leaf green at the same time get different critics.
     local first; first="${green_units%% *}"
     local pick; pick="$(unit_critic_pick "$slug" "$name" "$first")" || return 1
-    local ct="${pick%% *}" cm="${pick#* }" same=""
+    local ct="${pick%%$'\t'*}" cm="${pick#*$'\t'}" same=""
     for u in $green_units; do
       [ "$(unit_logged_tier "$slug" "$name" "$u")" = "$(unit_logged_tier "$slug" "$name" "$first")" ] && same="$same$u "
     done
@@ -1212,7 +1306,7 @@ next_action_applying() {
       local ut; ut="$(unit_tier "$slug" "$name" "$u")"
       tiers="$tiers$u=$ut;"; [ "$ut" = deep ] && st=deep
     done
-    _na_emit unit-spawn "$st" "$(model_for_tier "$slug" "$st")" "capacity free: unit create then one Agent per ready unit, at the tier unit_tiers gives it (deep for a unit others depend on, standard for a leaf)"
+    _na_emit unit-spawn "$st" "$(model_for_tier "$slug" "$st")" "capacity free: unit create then one subagent per ready unit, at the tier unit_tiers gives it (deep for a unit others depend on, standard for a leaf)"
     printf 'unit_tiers: %s\n' "${tiers%;}"
     printf 'units: %s\n' "$ready_line"
     printf 'running: %s\n' "$running_line"
@@ -1276,9 +1370,10 @@ next_action() {
 
   emit() { # emit action tier model reason [set_phase]
     printf 'action: %s\ntier: %s\nmodel: %s\n' "$1" "$2" "$3"
+    emit_fallback "$slug" "$2" "$3"
     [ -n "${5:-}" ] && printf 'set_phase: %s\n' "$5"
     printf 'reason: %s\n' "$4"
-    emit_role_lines "$slug" "$1"
+    emit_role_lines "$slug" "$1" "$2" "$3"
   }
   fix_tier() { # tier for fix round number (1-based)
     case "$1" in 1) echo standard ;; 2) echo standard ;; *) echo deep ;; esac
@@ -1359,12 +1454,14 @@ next_action() {
           local cnote; cnote="$(verify_note "$slug" "$name")"
           emit check none - "run the full gate and Verify concurrently on the committed tree; record last_gate_result green|red and last_verify_result${cnote:+; verify $cnote}"
           local vm; vm="$(verify_model "$slug" "$name")" || vm=-
+          local vt; vt="$(verify_tier "$slug" "$name")" || vt=""
           printf 'also: verify\nalso_model: %s\n' "$vm"
           local vp; vp="$(role_prompt verifier)" || return 1
           printf 'also_prompt: %s\n' "$vp"
           local vov; vov="$(role_overlay "$slug" verifier)"
           [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
-          printf 'also_agent: %s\n' "$(role_agent verifier)"
+          printf 'also_agent: %s\n' "$(role_agent "$slug" verifier "$vt" "$vm")"
+          [ -n "$vt" ] && { vfb="$(fallback_if_any "$slug" "$vt")"; [ -z "$vfb" ] || [ "$vfb" = "$vm" ] || printf 'also_fallback_model: %s\n' "$vfb"; }
           emit_effort ;;
         red)
           if [ "$verify" = spec ] && [ "$spec_amend" = accepted ]; then

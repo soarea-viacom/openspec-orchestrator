@@ -49,6 +49,806 @@
         "*"
       ],
       "required": false
+    },
+    "openspec-proposer-mechanical-claude-code": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, mechanical tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-proposer-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-standard-claude-code": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, standard tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-proposer-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-deep-claude-code": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, deep tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-proposer-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-max-claude-code": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, max tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-proposer-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-mechanical-cursor": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, mechanical tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-proposer-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-standard-cursor": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, standard tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-proposer-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-deep-cursor": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, deep tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-proposer-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-max-cursor": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, max tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-proposer-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-mechanical-copilot": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, mechanical tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-proposer-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-standard-copilot": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, standard tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-proposer-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-deep-copilot": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, deep tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-proposer-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-max-copilot": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, max tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-proposer-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-mechanical-codex": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, mechanical tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-proposer-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-standard-codex": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, standard tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-proposer-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-deep-codex": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, deep tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-proposer-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-max-codex": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, max tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-proposer-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-mechanical-opencode": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, mechanical tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-proposer-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-standard-opencode": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, standard tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-proposer-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-deep-opencode": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, deep tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-proposer-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-proposer-max-opencode": {
+      "description": "Propose — drafts the delta spec, seam list and Guardrails, max tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-proposer-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-mechanical-claude-code": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, mechanical tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-standard-claude-code": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, standard tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-deep-claude-code": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, deep tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-max-claude-code": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, max tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-mechanical-cursor": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, mechanical tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-standard-cursor": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, standard tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-deep-cursor": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, deep tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-max-cursor": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, max tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-mechanical-copilot": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, mechanical tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-standard-copilot": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, standard tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-deep-copilot": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, deep tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-max-copilot": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, max tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-mechanical-codex": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, mechanical tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-standard-codex": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, standard tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-deep-codex": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, deep tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-max-codex": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, max tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-mechanical-opencode": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, mechanical tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-standard-opencode": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, standard tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-deep-opencode": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, deep tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-critic-max-opencode": {
+      "description": "Proposal critic — fresh read of a draft against the request, glossary and ADRs, max tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-mechanical-claude-code": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, mechanical tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-verifier-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-standard-claude-code": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, standard tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-verifier-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-deep-claude-code": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, deep tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-verifier-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-max-claude-code": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, max tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-verifier-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-mechanical-cursor": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, mechanical tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-verifier-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-standard-cursor": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, standard tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-verifier-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-deep-cursor": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, deep tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-verifier-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-max-cursor": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, max tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-verifier-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-mechanical-copilot": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, mechanical tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-verifier-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-standard-copilot": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, standard tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-verifier-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-deep-copilot": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, deep tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-verifier-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-max-copilot": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, max tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-verifier-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-mechanical-codex": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, mechanical tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-verifier-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-standard-codex": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, standard tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-verifier-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-deep-codex": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, deep tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-verifier-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-max-codex": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, max tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-verifier-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-mechanical-opencode": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, mechanical tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-verifier-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-standard-opencode": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, standard tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-verifier-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-deep-opencode": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, deep tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-verifier-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-verifier-max-opencode": {
+      "description": "Verify — grades the committed change against the proposal and its Guardrails, max tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-verifier-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-mechanical-claude-code": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, mechanical tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-unit-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-standard-claude-code": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, standard tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-unit-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-deep-claude-code": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, deep tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-unit-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-max-claude-code": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, max tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-unit-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-mechanical-cursor": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, mechanical tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-unit-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-standard-cursor": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, standard tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-unit-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-deep-cursor": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, deep tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-unit-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-max-cursor": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, max tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-unit-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-mechanical-copilot": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, mechanical tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-unit-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-standard-copilot": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, standard tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-unit-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-deep-copilot": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, deep tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-unit-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-max-copilot": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, max tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-unit-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-mechanical-codex": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, mechanical tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-unit-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-standard-codex": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, standard tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-unit-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-deep-codex": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, deep tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-unit-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-max-codex": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, max tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-unit-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-mechanical-opencode": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, mechanical tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-unit-critic-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-standard-opencode": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, standard tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-unit-critic-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-deep-opencode": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, deep tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-unit-critic-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-unit-critic-max-opencode": {
+      "description": "Unit critic — fresh read of one green unit, checks first, then code, then screenshot, max tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-unit-critic-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-mechanical-claude-code": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, mechanical tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-worker-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-standard-claude-code": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, standard tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-worker-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-deep-claude-code": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, deep tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-worker-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-max-claude-code": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, max tier, for claude-code. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/claude-code/openspec-worker-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-mechanical-cursor": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, mechanical tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-worker-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-standard-cursor": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, standard tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-worker-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-deep-cursor": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, deep tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-worker-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-max-cursor": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, max tier, for cursor. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/cursor/openspec-worker-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-mechanical-copilot": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, mechanical tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-worker-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-standard-copilot": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, standard tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-worker-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-deep-copilot": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, deep tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-worker-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-max-copilot": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, max tier, for copilot. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/copilot/openspec-worker-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-mechanical-codex": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, mechanical tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-worker-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-standard-codex": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, standard tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-worker-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-deep-codex": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, deep tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-worker-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-max-codex": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, max tier, for codex. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/codex/openspec-worker-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-mechanical-opencode": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, mechanical tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-worker-mechanical/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-standard-opencode": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, standard tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-worker-standard/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-deep-opencode": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, deep tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-worker-deep/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
+    },
+    "openspec-worker-max-opencode": {
+      "description": "Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list, max tier, for opencode. Dispatched by the openspec-orchestrator engine.",
+      "path": "agents/opencode/openspec-worker-max/AGENT.md",
+      "teams": [
+        "*"
+      ],
+      "required": false
     }
   },
   "mcpServers": {},

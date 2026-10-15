@@ -1,6 +1,6 @@
 ---
 name: openspec-unit-critic
-description: Unit critic — fresh read of one green unit, checks first, then code, then screenshot. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.
+description: Unit critic — fresh read of one green unit, checks first, then code, then screenshot. Dispatched by the openspec-orchestrator engine with the tier model on the dispatch; never invoke directly.
 tools: Read, Write, Bash, Grep, Glob
 effort: medium
 ---

@@ -1,0 +1,105 @@
+# Model catalogue read by model_pick (scripts/lib.sh). TAB-separated (Copilot ids contain spaces).
+#   tier	<tool>	<tier>	<family>...       preference order; the first family with a model is the default, the next the fallback
+#   family	<tool>	<family>	<ERE>           first group = version ('-' or '_' read as '.'); matches ids from `models refresh`
+#   model	<tool>	<family>	<version>	<id>   ids confirmed in the tool's docs; the newest version per family wins
+# A family with no confirmed id is skipped until `models refresh` lists one. Sources: docs/research/model-ids.md.
+
+tier	claude-code	mechanical	claude-haiku	claude-sonnet
+tier	claude-code	standard	claude-sonnet	claude-opus
+tier	claude-code	deep	claude-opus	claude-fable
+tier	claude-code	max	claude-fable	claude-opus
+family	claude-code	claude-haiku	^claude-haiku-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	claude-code	claude-sonnet	^claude-sonnet-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	claude-code	claude-opus	^claude-opus-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	claude-code	claude-fable	^claude-fable-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+model	claude-code	claude-haiku	4.5	claude-haiku-4-5-20251001
+model	claude-code	claude-haiku	5.5	claude-haiku-5-5
+model	claude-code	claude-sonnet	5	claude-sonnet-5
+model	claude-code	claude-sonnet	5.5	claude-sonnet-5-5
+model	claude-code	claude-opus	5.5	claude-opus-5-5
+model	claude-code	claude-fable	5	claude-fable-5
+model	claude-code	claude-fable	5.1	claude-fable-5-1
+
+tier	cursor	mechanical	claude-haiku	claude-sonnet	gpt-sol	claude-opus
+tier	cursor	standard	claude-sonnet	gpt-sol	claude-opus
+tier	cursor	deep	claude-opus	gpt-sol
+tier	cursor	max	claude-fable	claude-opus	gpt-sol
+family	cursor	claude-haiku	^claude-haiku-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	cursor	claude-sonnet	^claude-sonnet-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	cursor	claude-opus	^claude-opus-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	cursor	claude-fable	^claude-fable-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+model	cursor	claude-haiku	5.5	claude-haiku-5-5
+model	cursor	claude-sonnet	5.5	claude-sonnet-5-5
+model	cursor	claude-opus	5	claude-opus-5
+model	cursor	claude-opus	5.5	claude-opus-5-5
+model	cursor	claude-fable	5.1	claude-fable-5-1
+family	cursor	gpt-luna	^gpt-([0-9]+(\.[0-9]+)?)-luna$
+family	cursor	gpt-sol	^gpt-([0-9]+(\.[0-9]+)?)-sol$
+family	cursor	gpt-astra	^gpt-([0-9]+(\.[0-9]+)?)-astra$
+model	cursor	gpt-luna	5.6	gpt-5.6-luna
+model	cursor	gpt-sol	5.6	gpt-5.6-sol
+
+tier	copilot	mechanical	claude-haiku	gpt-luna
+tier	copilot	standard	claude-sonnet	gpt-sol
+tier	copilot	deep	claude-opus	gpt-astra
+tier	copilot	max	claude-fable	gpt-astra
+family	copilot	claude-haiku	^Claude Haiku ([0-9]+(\.[0-9]+)?)$
+family	copilot	claude-sonnet	^Claude Sonnet ([0-9]+(\.[0-9]+)?)$
+family	copilot	claude-opus	^Claude Opus ([0-9]+(\.[0-9]+)?)$
+family	copilot	claude-fable	^Claude Fable ([0-9]+(\.[0-9]+)?)$
+family	copilot	gpt-luna	^GPT-([0-9]+(\.[0-9]+)?) Luna$
+family	copilot	gpt-sol	^GPT-([0-9]+(\.[0-9]+)?) Sol$
+family	copilot	gpt-astra	^GPT-([0-9]+(\.[0-9]+)?) Astra$
+model	copilot	claude-haiku	4.5	Claude Haiku 4.5
+model	copilot	claude-haiku	5.5	Claude Haiku 5.5
+model	copilot	claude-sonnet	5	Claude Sonnet 5
+model	copilot	claude-sonnet	5.5	Claude Sonnet 5.5
+model	copilot	claude-opus	5	Claude Opus 5
+model	copilot	claude-opus	5.5	Claude Opus 5.5
+model	copilot	claude-fable	5	Claude Fable 5
+model	copilot	claude-fable	5.1	Claude Fable 5.1
+model	copilot	gpt-luna	6	GPT-6 Luna
+model	copilot	gpt-luna	5.6	GPT-5.6 Luna
+model	copilot	gpt-sol	6	GPT-6 Sol
+model	copilot	gpt-sol	6.1	GPT-6.1 Sol
+model	copilot	gpt-sol	5.6	GPT-5.6 Sol
+model	copilot	gpt-astra	6	GPT-6 Astra
+
+tier	codex	mechanical	gpt-luna	gpt-sol
+tier	codex	standard	gpt-sol	gpt-astra	gpt-terra
+tier	codex	deep	gpt-astra	gpt-sol	gpt-terra
+tier	codex	max	gpt-astra	gpt-sol	gpt-terra
+family	codex	gpt-luna	^gpt-([0-9]+(\.[0-9]+)?)-luna$
+family	codex	gpt-sol	^gpt-([0-9]+(\.[0-9]+)?)-sol$
+family	codex	gpt-astra	^gpt-([0-9]+(\.[0-9]+)?)-astra$
+family	codex	gpt-terra	^gpt-([0-9]+(\.[0-9]+)?)-terra$
+model	codex	gpt-luna	6	gpt-6-luna
+model	codex	gpt-sol	6	gpt-6-sol
+model	codex	gpt-sol	6.1	gpt-6.1-sol
+model	codex	gpt-astra	6	gpt-6-astra
+model	codex	gpt-terra	5.6	gpt-5.6-terra
+
+tier	opencode	mechanical	claude-haiku	gpt-luna
+tier	opencode	standard	claude-sonnet	gpt-sol
+tier	opencode	deep	claude-opus	gpt-astra
+tier	opencode	max	claude-fable	gpt-astra
+family	opencode	claude-haiku	^anthropic/claude-haiku-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	opencode	claude-sonnet	^anthropic/claude-sonnet-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	opencode	claude-opus	^anthropic/claude-opus-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+family	opencode	claude-fable	^anthropic/claude-fable-([0-9]+(-[0-9]+)?)(-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9])?$
+model	opencode	claude-haiku	5.5	anthropic/claude-haiku-5-5
+model	opencode	claude-sonnet	5	anthropic/claude-sonnet-5
+model	opencode	claude-sonnet	5.5	anthropic/claude-sonnet-5-5
+model	opencode	claude-opus	5	anthropic/claude-opus-5
+model	opencode	claude-opus	5.5	anthropic/claude-opus-5-5
+model	opencode	claude-fable	5	anthropic/claude-fable-5
+model	opencode	claude-fable	5.1	anthropic/claude-fable-5-1
+family	opencode	gpt-luna	^openai/gpt-([0-9]+(\.[0-9]+)?)-luna$
+family	opencode	gpt-sol	^openai/gpt-([0-9]+(\.[0-9]+)?)-sol$
+family	opencode	gpt-astra	^openai/gpt-([0-9]+(\.[0-9]+)?)-astra$
+model	opencode	gpt-luna	5.6	openai/gpt-5.6-luna
+model	opencode	gpt-luna	6	openai/gpt-6-luna
+model	opencode	gpt-sol	5.6	openai/gpt-5.6-sol
+model	opencode	gpt-sol	6	openai/gpt-6-sol
+model	opencode	gpt-sol	6.1	openai/gpt-6.1-sol
+model	opencode	gpt-astra	6	openai/gpt-6-astra

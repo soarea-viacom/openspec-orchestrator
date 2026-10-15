@@ -1,6 +1,6 @@
 ---
 name: openspec-critic
-description: Proposal critic — fresh read of a draft against the request, glossary and ADRs. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.
+description: Proposal critic — fresh read of a draft against the request, glossary and ADRs. Dispatched by the openspec-orchestrator engine with the tier model on the dispatch; never invoke directly.
 tools: Read, Write, Bash, Grep, Glob
 effort: high
 ---

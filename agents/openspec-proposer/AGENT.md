@@ -1,6 +1,6 @@
 ---
 name: openspec-proposer
-description: Propose — drafts the delta spec, seam list and Guardrails. Dispatched by the openspec-orchestrator engine with the tier model on the Agent call; never invoke directly.
+description: Propose — drafts the delta spec, seam list and Guardrails. Dispatched by the openspec-orchestrator engine with the tier model on the dispatch; never invoke directly.
 tools: Read, Write, Edit, Bash, Grep, Glob
 effort: high
 ---
