@@ -668,11 +668,16 @@ Change: $NAME"
 cmd_model_get() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$TIER" ] || usage
-  model_for_tier "$STORE" "$TIER"
-  print_fallback "$TIER"
+  local m; m="$(model_for_tier "$STORE" "$TIER")" || exit 1
+  echo "$m"
+  print_fallback "$TIER" "$m"
 }
-# print_fallback <tier> -- `fallback: <model>`, nothing when the tier has none
-print_fallback() { local fb; fb="$(fallback_if_any "$STORE" "$1")"; [ -z "$fb" ] || echo "fallback: $fb"; }
+# print_fallback <tier> <model> -- `fallback: <model>`, nothing when the tier
+# has none or the dispatch already runs on it (checker_model)
+print_fallback() {
+  local fb; fb="$(fallback_if_any "$STORE" "$1")"
+  [ -z "$fb" ] || [ "$fb" = "$2" ] || echo "fallback: $fb"
+}
 
 # Only cursor and opencode document a model-listing command; elsewhere the
 # catalogue is used as-is.
@@ -707,8 +712,10 @@ print_checker_effort() {
 cmd_model_verify() {
   parse_opts "$@"
   [ -n "$STORE" ] && [ -n "$NAME" ] || usage
-  verify_model "$STORE" "$NAME"
-  print_fallback "$(verify_tier "$STORE" "$NAME")"
+  local pick; pick="$(verify_pick "$STORE" "$NAME")" || exit 1
+  local m; m="$(printf '%s\n' "$pick" | cut -f2)"
+  echo "$m"
+  print_fallback "$(printf '%s\n' "$pick" | cut -f1)" "$m"
   print_checker_effort
   checker_inputs verify "$STORE" "$NAME"
 }
@@ -719,12 +726,13 @@ cmd_model_critic() {
   if [ -n "$UNIT" ]; then
     local pick; pick="$(unit_critic_pick "$STORE" "$NAME" "$UNIT")" || exit 1
     echo "${pick#*$'\t'}"
-    print_fallback "${pick%%$'\t'*}"
+    print_fallback "${pick%%$'\t'*}" "${pick#*$'\t'}"
     print_checker_effort
     checker_inputs unit-critic "$STORE" "$NAME" "$UNIT"
   else
-    critic_model "$STORE" "$NAME"
-    print_fallback "$(critic_tier "$STORE" "$NAME")"
+    local pick; pick="$(critic_pick "$STORE" "$NAME")" || exit 1
+    echo "${pick#*$'\t'}"
+    print_fallback "${pick%%$'\t'*}" "${pick#*$'\t'}"
     print_checker_effort
     checker_inputs critic "$STORE" "$NAME"
   fi
