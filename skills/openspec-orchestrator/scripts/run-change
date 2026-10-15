@@ -691,10 +691,11 @@ cmd_models_refresh() {
   mkdir -p "$(dirname "$out")"
   # Cursor lists every effort/thinking/fast variant as its own id but accepts the bare id, which the catalogue uses.
   local strip='cat'; [ "$tool" = cursor ] && strip="sed -E -e :a -e s/-(fast|thinking|none|minimal|low|medium|high|xhigh|max|extra-high)\$// -e ta"
-  if ! $cmd 2>/dev/null | grep -oE '[A-Za-z0-9][A-Za-z0-9._/:-]+' | $strip | sort -u > "$out.tmp"; then
-    rm -f "$out.tmp"; echo "model listing for $tool failed; $out left as it was" >&2; return 1
+  local tmp; tmp="$(mktemp "$out.XXXXXX")"
+  if ! $cmd 2>/dev/null | grep -oE '[A-Za-z0-9][A-Za-z0-9._/:-]+' | $strip | sort -u > "$tmp"; then
+    rm -f "$tmp"; echo "model listing for $tool failed; $out left as it was" >&2; return 1
   fi
-  mv "$out.tmp" "$out"
+  mv "$tmp" "$out"
   echo "wrote $(wc -l < "$out" | tr -d ' ') ids to $out"
 }
 
