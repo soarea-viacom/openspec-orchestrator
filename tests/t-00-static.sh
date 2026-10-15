@@ -105,7 +105,7 @@ for tool in claude-code cursor copilot codex opencode; do
 done
 check "claude-code critic-max pins the max default" grep -qx "model: $(bash -c "source $SKILL/scripts/lib.sh; model_pick claude-code max 1")" agents/claude-code/openspec-critic-max/AGENT.md
 check "copilot agents carry a two-item model list" grep -qE "^model: \['[^']+', '[^']+'\]$" agents/copilot/openspec-worker-standard/AGENT.md
-check "cursor checker agents are readonly" grep -qx "readonly: true" agents/cursor/openspec-verifier-deep/AGENT.md
+check_fails "cursor checker agents are not readonly (they write their report)" grep -qx "readonly: true" agents/cursor/openspec-verifier-deep/AGENT.md
 check "catalog lists 100 per-tool agents" bash -c "[ \$(python3 -c \"import json;print(sum(k.endswith(('-claude-code','-cursor','-copilot','-codex','-opencode')) for k in json.load(open('atlas-catalog.json'))['agents']))\") -eq 100 ]"
 
 # standalone install: one home, linked into each tool's dirs
@@ -116,7 +116,7 @@ done
 check "claude-code agent links into the home" test -L "$IH/.claude/agents/openspec-critic-max"
 check "cursor agent is a flat .md link" test -L "$IH/.cursor/agents/openspec-critic-max.md"
 check "copilot agent is a .agent.md link" test -L "$IH/.copilot/agents/openspec-critic-max.agent.md"
-check "opencode uses ~/.config/opencode" test -L "$IH/.config/opencode/agents/openspec-critic-max.md"
+check "opencode uses ~/.config/opencode and the -opencode suffix" test -L "$IH/.config/opencode/agents/openspec-critic-max-opencode.md"
 check "skill dir links into the home" test -L "$IH/.codex/skills/openspec-orchestrator"
 check "codex agents are TOML with model and effort keys" python3 -c "import tomllib,sys; d=tomllib.load(open('$IH/.codex/agents/openspec-verifier-deep.toml','rb')); sys.exit(0 if d['model']=='gpt-6-astra' and d['model_reasoning_effort']=='high' and d['developer_instructions'].startswith('You are') else 1)"
 ih1="$(cd "$IH" && find . | sort | shasum)"
@@ -126,6 +126,13 @@ echo mine > "$IH/.cursor/agents/openspec-mine.md"
 env HOME="$IH" XDG_DATA_HOME= tools/install.sh --tool cursor --uninstall
 check "uninstall removes its own links" test ! -e "$IH/.cursor/agents/openspec-critic-max.md"
 check "uninstall leaves files it did not install" test -f "$IH/.cursor/agents/openspec-mine.md"
+IHS="$TMP/install home"; PS="$TMP/project with space"; mkdir -p "$PS"
+check "install.sh handles a home with a space" env HOME="$IHS" XDG_DATA_HOME= tools/install.sh --tool cursor
+check "install.sh linked the skill under the spaced home" test -L "$IHS/.cursor/skills/openspec-orchestrator"
+check "install.sh handles a project with a space" env HOME="$IHS" XDG_DATA_HOME= tools/install.sh --tool codex --project "$PS"
+check "install.sh linked an agent under the spaced project" test -L "$PS/.codex/agents/openspec-critic-max.toml"
+env HOME="$IHS" XDG_DATA_HOME= tools/install.sh --tool cursor --uninstall
+check "uninstall handles a home with a space" test ! -e "$IHS/.cursor/agents/openspec-critic-max.md"
 check "no doc names Claude Code's Agent tool or subagent_type" bash -c "cd $SKILL && ! grep -rnE 'Agent tool|Agent call|subagent_type|Skill tool' SKILL.md AUTONOMOUS-ORCHESTRATION.md CONTEXT.md scripts/lib.sh scripts/roles ../../agents"
 
 # =====================================================================

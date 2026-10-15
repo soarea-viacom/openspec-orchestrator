@@ -269,11 +269,14 @@
   terms and decisions into the Project glossary and ADRs; an external-mode
   guard compares `git status --porcelain` before and after; nothing is
   ever committed.
-- **Role agent**: the agent definition for a role,
-  `openspec-<role>` (`agents/openspec-<role>/AGENT.md` here, installed by
-  Atlas), body = the role prompt verbatim, frontmatter = effort (`high`
-  proposer/critic/verifier, `medium` unit-critic/worker) and tool
-  allowlist (no `Edit` for checkers, no `Agent` for anyone). `next` prints
+- **Role agent**: the agent definition for a role at a tier on a host tool,
+  `openspec-<role>-<tier>` (`agents/<tool>/openspec-<role>-<tier>/AGENT.md`
+  here, catalogued as `openspec-<role>-<tier>-<tool>`; on OpenCode the
+  installed name keeps that suffix), body = the role prompt verbatim,
+  frontmatter = the tier's default model from `models.tsv` plus what the
+  host can express: effort (`high` proposer/critic/verifier, `medium`
+  unit-critic/worker) on Claude Code and Codex, the tool allowlist (no
+  `Edit` for checkers, no `Agent` for anyone) on Claude Code. `next` prints
   `agent:` beside `model:`; the orchestrator passes both on dispatch.
 - **Role prompt**: the engine's own dispatch text for a role,
   `scripts/roles/<role>.md` — one per `ROLES` entry (`proposer`, `critic`,

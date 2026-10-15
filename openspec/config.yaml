@@ -22,6 +22,9 @@ context: |
   one bump per change. Comments state non-obvious rationale only. A change
   that adds an orchestration.* key, a role, or a convention updates the
   example block and this context in the same change; Verify warns otherwise.
+  orchestration.tool names the host agent tool (claude-code, cursor, copilot,
+  codex, opencode; unset means claude-code) and selects the models.tsv
+  column and the per-tier agent set next names.
   Project notes per role live in openspec/roles/<role>.md (proposer, critic,
   worker, unit-critic, verifier) and are appended to that role's dispatch.
   The engine's own prompts live at skills/openspec-orchestrator/scripts/roles/<role>.md and print before
@@ -60,6 +63,7 @@ context: |
 # refuses any project that does.
 # Example:
 #   orchestration:
+#     tool: claude-code       # host agent tool: claude-code|cursor|copilot|codex|opencode
 #     concurrency: 2          # change-level slots (default 2)
 #     unit_concurrency: 3     # units in flight per change (default 3)
 #     parallel: true          # false = one unit per change

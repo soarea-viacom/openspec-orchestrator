@@ -240,10 +240,10 @@ run_gate() {
 model_for_tier() {
   local slug="$1" tier="$2" rank="${3:-1}"
   case "$tier" in mechanical|standard|deep|max) ;; *) echo "unknown tier: $tier" >&2; return 1 ;; esac
+  local tool; tool="$(host_tool "$slug")" || return 1
   local key="model_${tier}"; [ "$rank" = 1 ] || key="model_${tier}_fallback"
   local v; v="$(orch_scalar "$slug" "$key")"
   [ -n "$v" ] && { echo "$v"; return 0; }
-  local tool; tool="$(host_tool "$slug")" || return 1
   model_pick "$tool" "$tier" "$rank" "$(models_list_file "$slug" "$tool")"
 }
 fallback_for_tier() { model_for_tier "$1" "$2" 2; }
@@ -311,8 +311,9 @@ model_pick() {
 # their per-dispatch model tiers.
 HOST_TOOLS="claude-code cursor copilot codex opencode"
 host_tool() {
-  local t; t="$(orch_scalar "$1" tool)"; t="${t:-claude-code}"
-  case " $HOST_TOOLS " in *" $t "*) echo "$t" ;; *) echo "unknown orchestration.tool '$t' (one of: $HOST_TOOLS)" >&2; return 1 ;; esac
+  local t h; t="$(orch_scalar "$1" tool)"; t="${t:-claude-code}"
+  for h in $HOST_TOOLS; do [ "$h" = "$t" ] && { echo "$t"; return 0; }; done
+  echo "unknown orchestration.tool '$t' (one of: $HOST_TOOLS)" >&2; return 1
 }
 
 # orch_scalar <store-slug> <key> -> orchestration.<key> as a bare scalar,
@@ -1102,7 +1103,14 @@ pillars_trivial() {
 # dispatches this role as: one per role and tier, generated per tool with
 # that tier's default model pinned (tools/build-agents.sh). The model is
 # also passed on the dispatch, which wins where the host supports it.
-role_agent() { echo "openspec-$1-$2"; }
+# role_agent <slug> <role> <tier> -> the installed agent's name. OpenCode
+# names an agent by its file, and Atlas files it under the catalog key,
+# which carries the -opencode suffix; tools/install.sh matches that.
+role_agent() {
+  local tool; tool="$(host_tool "$1")" || return 1
+  local suffix=""; [ "$tool" != opencode ] || suffix="-opencode"
+  echo "openspec-$2-$3$suffix"
+}
 
 # emit_fallback <slug> <tier> -> `fallback_model:` for a model-bearing tier.
 emit_fallback() {
@@ -1117,7 +1125,7 @@ emit_role_lines() {
   printf 'prompt: %s\n' "$p"
   local ov; ov="$(role_overlay "$1" "$r")"
   [ -n "$ov" ] && printf 'overlay: %s\n' "$ov"
-  printf 'agent: %s\n' "$(role_agent "$r" "$3")"
+  printf 'agent: %s\n' "$(role_agent "$1" "$r" "$3")"
   return 0
 }
 
@@ -1427,7 +1435,7 @@ next_action() {
           printf 'also_prompt: %s\n' "$vp"
           local vov; vov="$(role_overlay "$slug" verifier)"
           [ -n "$vov" ] && printf 'also_overlay: %s\n' "$vov"
-          printf 'also_agent: %s\n' "$(role_agent verifier "$vt")"
+          printf 'also_agent: %s\n' "$(role_agent "$slug" verifier "$vt")"
           [ -n "$vt" ] && printf 'also_fallback_model: %s\n' "$(fallback_for_tier "$slug" "$vt")"
           emit_effort ;;
         red)

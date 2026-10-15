@@ -132,7 +132,8 @@ tools/install.sh --tool claude-code
 20 per-tier agents into one home (`~/.local/share/openspec-orchestrator/`) and symlinks them
 into the tool's directories, so every tool reads the same files; `--copy` copies instead,
 for tools that don't follow symlinks. Codex agents are written as TOML with `model` and
-`model_reasoning_effort` set. `--uninstall` removes only what it installed. Minimal Claude
+`model_reasoning_effort` set; OpenCode agent files carry the `-opencode` suffix, the name Atlas
+installs and `next` prints. `--uninstall` removes only what it installed. Minimal Claude
 Code install:
 
 ```bash

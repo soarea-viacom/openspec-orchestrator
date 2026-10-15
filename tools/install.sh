@@ -20,21 +20,22 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$TOOL" ] || { echo "--tool is required" >&2; exit 2; }
 
-# <skills dir> <agents dir> <agent entry pattern: NAME is replaced>
+# ENTRY is the agent file name with NAME replaced. OpenCode's carries the
+# -opencode suffix: that tool names an agent by its file and Atlas files it
+# under the catalog key, so next prints the same name for both installs.
 case "$TOOL:${PROJECT:+p}" in
-  claude-code:)  dirs="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents NAME" ;;
-  claude-code:p) dirs="$PROJECT/.claude/skills $PROJECT/.claude/agents NAME" ;;
-  cursor:)       dirs="$HOME/.cursor/skills $HOME/.cursor/agents NAME.md" ;;
-  cursor:p)      dirs="$PROJECT/.cursor/skills $PROJECT/.cursor/agents NAME.md" ;;
-  copilot:)      dirs="$HOME/.copilot/skills $HOME/.copilot/agents NAME.agent.md" ;;
-  copilot:p)     dirs="$PROJECT/.github/skills $PROJECT/.github/agents NAME.agent.md" ;;
-  codex:)        dirs="$HOME/.codex/skills $HOME/.codex/agents NAME.toml" ;;
-  codex:p)       dirs="$PROJECT/.agents/skills $PROJECT/.codex/agents NAME.toml" ;;
-  opencode:)     dirs="$HOME/.config/opencode/skills $HOME/.config/opencode/agents NAME.md" ;;
-  opencode:p)    dirs="$PROJECT/.opencode/skills $PROJECT/.opencode/agents NAME.md" ;;
+  claude-code:)  SKILLS_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"; AGENTS_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents"; ENTRY=NAME ;;
+  claude-code:p) SKILLS_DIR="$PROJECT/.claude/skills"; AGENTS_DIR="$PROJECT/.claude/agents"; ENTRY=NAME ;;
+  cursor:)       SKILLS_DIR="$HOME/.cursor/skills"; AGENTS_DIR="$HOME/.cursor/agents"; ENTRY=NAME.md ;;
+  cursor:p)      SKILLS_DIR="$PROJECT/.cursor/skills"; AGENTS_DIR="$PROJECT/.cursor/agents"; ENTRY=NAME.md ;;
+  copilot:)      SKILLS_DIR="$HOME/.copilot/skills"; AGENTS_DIR="$HOME/.copilot/agents"; ENTRY=NAME.agent.md ;;
+  copilot:p)     SKILLS_DIR="$PROJECT/.github/skills"; AGENTS_DIR="$PROJECT/.github/agents"; ENTRY=NAME.agent.md ;;
+  codex:)        SKILLS_DIR="$HOME/.codex/skills"; AGENTS_DIR="$HOME/.codex/agents"; ENTRY=NAME.toml ;;
+  codex:p)       SKILLS_DIR="$PROJECT/.agents/skills"; AGENTS_DIR="$PROJECT/.codex/agents"; ENTRY=NAME.toml ;;
+  opencode:)     SKILLS_DIR="$HOME/.config/opencode/skills"; AGENTS_DIR="$HOME/.config/opencode/agents"; ENTRY=NAME-opencode.md ;;
+  opencode:p)    SKILLS_DIR="$PROJECT/.opencode/skills"; AGENTS_DIR="$PROJECT/.opencode/agents"; ENTRY=NAME-opencode.md ;;
   *) echo "unknown tool $TOOL" >&2; exit 2 ;;
 esac
-read -r SKILLS_DIR AGENTS_DIR ENTRY <<<"$dirs"
 
 run() { if [ "$DRY" = 1 ]; then echo "$*"; else "$@"; fi; }
 
@@ -57,7 +58,9 @@ place() { # place <home path> <destination>
 agent_names() { for d in "$SRC/agents/$TOOL"/openspec-*/; do basename "$d"; done; }
 
 if [ "$UNINSTALL" = 1 ]; then
-  for p in "$SKILLS_DIR/openspec-orchestrator" $(for n in $(agent_names); do echo "$AGENTS_DIR/${ENTRY//NAME/$n}"; done); do
+  paths=("$SKILLS_DIR/openspec-orchestrator")
+  for n in $(agent_names); do paths+=("$AGENTS_DIR/${ENTRY//NAME/$n}"); done
+  for p in "${paths[@]}"; do
     if ours "$p"; then run rm -rf "$p" "$p.openspec-orchestrator"; fi
   done
   exit 0

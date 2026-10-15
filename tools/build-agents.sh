@@ -7,8 +7,8 @@ set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROLES=skills/openspec-orchestrator/scripts/roles
 # role:effort:tools:description — checkers get no Edit (they write one
-# report file), writers get Edit; nobody gets Agent (no nesting: the
-# orchestrator owns dispatch). The description is stated here, not cut
+# report file, so they are not readonly either), writers get Edit; nobody
+# gets Agent (no nesting: the orchestrator owns dispatch). The description is stated here, not cut
 # from the prompt's first line, which carries anchors and punctuation.
 TABLE='proposer:high:Read, Write, Edit, Bash, Grep, Glob:Propose — drafts the delta spec, seam list and Guardrails
 critic:high:Read, Write, Bash, Grep, Glob:Proposal critic — fresh read of a draft against the request, glossary and ADRs
@@ -49,7 +49,7 @@ while IFS=: read -r role effort tools desc; do
         printf -- '---\nname: %s\ndescription: %s, %s tier. Dispatched by the openspec-orchestrator engine; never invoke directly.\n' "$name" "$desc" "$tier"
         case "$tool" in
           claude-code) printf 'model: %s\ntools: %s\neffort: %s\n' "$m1" "$tools" "$effort" ;;
-          cursor) printf 'model: %s\n' "$m1"; case "$tools" in *Edit*) ;; *) printf 'readonly: true\n' ;; esac ;;
+          cursor) printf 'model: %s\n' "$m1" ;;
           copilot) printf "model: ['%s', '%s']\n" "$m1" "$m2" ;;
           codex) printf 'model: %s\neffort: %s\n' "$m1" "$effort" ;;
           opencode) printf 'mode: subagent\nmodel: %s\n' "$m1" ;;

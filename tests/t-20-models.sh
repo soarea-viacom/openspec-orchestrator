@@ -30,7 +30,7 @@ check_out "model verify: a deep fixer still goes to max by the tier-above rule" 
 vf_out="$($RC next --store store-vf --name feat-vf)"
 case "$vf_out" in *"floor:"*) echo "FAIL next: no floor note when tier-above already wins"; fails=$((fails+1)) ;; *) echo "ok   next: no floor note when tier-above already wins" ;; esac
 
-# host tool: only claude-code sets a model per dispatch; others resolve to session
+# host tool: selects the models.tsv column and the agent set
 mkstore store-host >/dev/null <<'EOF'
 orchestration:
   tool: codex
@@ -45,7 +45,16 @@ $RC session append --store store-host --name feat-host role proposer phase propo
 check_out "model critic still uses a mapped tier above on a non-Claude host" "gpt-custom" $RC model critic --store store-host --name feat-host
 sed -i.bak 's/tool: codex/tool: emacs/' "$TMP/store-host/openspec/config.yaml"
 check_err "unknown host tool errors" "unknown orchestration.tool 'emacs'" $RC model get --store store-host --tier deep
-sed -i.bak 's/tool: emacs/tool: codex/' "$TMP/store-host/openspec/config.yaml"
+check_err "unknown host tool errors even for a tier with a model override" "unknown orchestration.tool 'emacs'" $RC model get --store store-host --tier max
+sed -i.bak 's/tool: emacs/tool: "*"/' "$TMP/store-host/openspec/config.yaml"
+check_err "host tool is matched exactly, not as a pattern" "unknown orchestration.tool '*'" $RC model get --store store-host --tier deep
+sed -i.bak 's/tool: "\*"/tool: codex/' "$TMP/store-host/openspec/config.yaml"
+mkstore store-oc >/dev/null <<'EOF'
+orchestration:
+  tool: opencode
+EOF
+mkchange store-oc feat-oc
+check_line "next on OpenCode names the agent with its -opencode suffix" "agent: openspec-proposer-standard-opencode" $RC next --store store-oc --name feat-oc
 
 # model catalogue: newest version per family, a different family as fallback
 check_out "model get prints a fallback from the next family" "fallback: gpt-6.1-sol" $RC model get --store store-host --tier deep
