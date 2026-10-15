@@ -879,11 +879,13 @@ session_append() {
 # last_session_field <store-slug> <change-name> <phase-regex> <field> -> that
 # field of the most recent session entry whose phase matches, empty if none.
 # The session log is the only record of who wrote what, and at which tier.
+# A value runs to the next " key=" token, not the next space: Copilot model
+# ids contain spaces.
 last_session_field() {
   local f; f="$(session_log_path "$1" "$2")"
   [ -f "$f" ] || return 0
   grep -E "phase=($3)" "$f" 2>/dev/null | tail -n1 \
-    | grep -o "$4=[^ ]*" | cut -d= -f2 || true
+    | { grep -o " $4=.*" || true; } | sed -E "s/^ $4=//; s/ [A-Za-z_]+=.*$//" || true
 }
 
 # advisor_calls <store-slug> <change-name> -> count of role=advisor session

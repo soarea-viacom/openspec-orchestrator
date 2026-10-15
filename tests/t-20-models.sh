@@ -113,6 +113,13 @@ check_line "next prints the whole Copilot id as model:" "model: Claude Opus 5.5"
 check_not "next leaks no part of the id into reason:" "; Opus" $RC next --store store-cp --name feat-cp
 $RC session append --store store-cp --name feat-cp role proposer phase proposed tier deep model "Claude Opus 5.5" transcript_id c2
 check_line "model critic keeps a Copilot id with spaces whole" "Claude Fable 5.1" bash -c "$RC model critic --store store-cp --name feat-cp | sed -n 1p"
+# the session log must give the whole id back too, or a same-model checker
+# on Copilot would never be detected
+cat >> "$TMP/store-cp/openspec/config.yaml" <<'EOF'
+  model_max: "Claude Opus 5.5"
+  model_max_fallback: "Claude Opus 5.5"
+EOF
+check_err "a Copilot id read back from the session log still detects the same-model checker" "both resolve to the proposer's own model (Claude Opus 5.5)" $RC model critic --store store-cp --name feat-cp
 check_out "next prints a fallback_model" "fallback_model: " $RC next --store store-host --name feat-host
 check_out "next names the per-tier agent" "agent: openspec-" $RC next --store store-host --name feat-host
 
