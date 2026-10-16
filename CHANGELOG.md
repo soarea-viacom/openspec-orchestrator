@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.1.0
+
+A file-list entry ending in `/` names a directory and covers every path under it — in `units check` (seam coverage and the overlap rule) and in `unit merge`'s scope check — while counting as one entry toward the unit size cap, so a unit can own a generated tree such as `agents/` without listing every file. Without the slash an entry is a plain path, as before.
+
 ## 3.0.0
 
 The Atlas catalog is removed and `tools/install.sh` is the only install path; release notes move from `releases.json` to this file; OpenCode agents are now installed as `openspec-<role>-<tier>.md`, so re-run `tools/install.sh --tool opencode` and delete the old `openspec-*-opencode.md` links; the unsuffixed `agents/openspec-<role>/` set is gone.

@@ -771,6 +771,8 @@ three granularities, same rule, same data source:
   unit branch whose diff touches a file outside that unit's own list —
   `units_check` catches a bad split before any worker starts, this catches
   a worker that drifted outside its list despite the split being sound.
+  An entry ending in `/` names a directory and covers every path under it
+  at both granularities, counting as one entry toward the size cap.
 - **Across a project**, among in-flight initiative children: compare the
   `seams` field of every child not yet merged before starting a new one
   concurrently, on top of (not instead of) the `depends_on` ordering.

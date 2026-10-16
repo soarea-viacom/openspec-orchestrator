@@ -108,7 +108,8 @@
   seams "<seam>=<file>,<file>;<seam>=<file>"` — one `name=file,file,...`
   group per seam, groups separated by `;`. The sole source the
   disjoint-files check reads from; nothing infers seams from the delta spec
-  prose or from the code after the fact.
+  prose or from the code after the fact. An entry ending in `/` names a
+  directory and covers every path under it.
 - **Session log**: `<store>/.orchestration/state/<change>.sessions.log` —
   an append-only, one-line-per-run history, written via `scripts/run-change
   session append --store <slug> --name <change> key value [key value ...]`

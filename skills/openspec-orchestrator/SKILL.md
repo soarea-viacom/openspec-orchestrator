@@ -77,7 +77,7 @@ Every OpenSpec CLI call below gets `--store <slug>` appended — e.g. `openspec 
     checks first and commits them before any implementation — unit tests, and for a UI
     unit a Playwright script asserting layout invariants — then loops `unit iterate`
     (engine-run checks, capped at 5 iterations) until green; it never asserts its own
-    result. A unit is a tiny testable piece: at most 8 files and 3 tasks (`units check`
+    result. A unit is a tiny testable piece: at most 8 files — a `dir/` entry counts as one — and 3 tasks (`units check`
     refuses more unless the proposal justifies it). Two reds in a row make the advisor mandatory before the next iteration; a red
     after the advice, or a check that contradicts the spec, fails the unit to Gate 1 at
     once instead of at the cap.

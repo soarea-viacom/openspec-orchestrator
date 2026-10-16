@@ -8,6 +8,8 @@ TBD - created by archiving change parallel-unit-execution. Update Purpose after 
 ### Requirement: Unit split recorded in state
 At phase `applying` with an empty `units` field, `next` SHALL return `action: split` — tier `deep` under `lifecycle: full` with parallel mode on, tier `none` with a reason naming `units single` otherwise — and SHALL NOT print a `running:` line. The split SHALL be recorded only as state fields: `units` (`<u>=<file>,<file>;...`, the seam dialect), `unit_deps` (`<u>=<dep>,<dep>;...`), `unit_tasks` (`<u>=<task-id>,...;...`), `ui_units` (`<u>,<u>`). `state init` SHALL write all four and `parallel` as `""`. The state-only check `units_check` SHALL fail when a unit name is not kebab-case, a dep names no unit, deps form a cycle, a unit file is in no `seams` list, two units with overlapping files are not ordered by a dep path, a unit has no file, or a task id is in two units. `next` SHALL run only that check (it reads no tasks.md and no worktree) and exit non-zero when it fails. `scripts/run-change units check --store <slug> --name <change>` SHALL run the same check, then print `unassigned: <id>` for each tasks.md id in no unit, and exit 0 when the check passes. `units single [--ui]` SHALL write one unit `all` holding the union of the seam files and every task id, with `ui_units: all` under `--ui`.
 
+A file-list entry ending in `/` names a directory and covers every path under it — in seam coverage, in the overlap rule and in `unit merge`'s scope check — and counts as one entry toward the size cap. Without the slash an entry is a plain path.
+
 #### Scenario: Full parallel split at deep
 - **WHEN** a `full` change is at `applying` with `units: ""`
 - **THEN** `next` returns `action: split` and `tier: deep`, with no `running:` line
@@ -15,6 +17,10 @@ At phase `applying` with an empty `units` field, `next` SHALL return `action: sp
 #### Scenario: Cycle rejected
 - **WHEN** `unit_deps: "a=b;b=a"`
 - **THEN** `units check` exits non-zero naming `a` and `b`, and `next` exits non-zero
+
+#### Scenario: Directory entry covers paths under it
+- **WHEN** `seams: "s=agents/"`, `units: "a=agents/;b=agents/x/AGENT.md"` and `unit_deps: ""`
+- **THEN** `units check` exits non-zero naming the overlap; with `unit_deps: "b=a"` it exits 0; with `units: "a=agents"` (no slash) it exits non-zero naming `agents` as outside the seams
 
 #### Scenario: Unordered overlap rejected
 - **WHEN** `units: "a=x.js;b=x.js"` and `unit_deps: ""`
@@ -145,6 +151,10 @@ A unit with status `running`, `reviewing`, `conflict`, or `resolving` SHALL hold
 #### Scenario: Out-of-scope file refused
 - **WHEN** unit `a` (files `a.js`) committed `b.js`
 - **THEN** `unit merge --unit a` exits non-zero naming `b.js` and `change/<name>` is unchanged
+
+#### Scenario: Directory entry at merge
+- **WHEN** unit `a` (files `src/`) committed `src/deep/new.js`
+- **THEN** `unit merge --unit a` succeeds; with files `src` (no slash) it exits non-zero naming `src/new.js`
 
 #### Scenario: Conflict then failure
 - **WHEN** a rebase conflicts
