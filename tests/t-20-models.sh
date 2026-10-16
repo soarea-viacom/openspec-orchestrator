@@ -68,7 +68,8 @@ orchestration:
   tool: opencode
 EOF
 mkchange store-oc feat-oc
-check_line "next on OpenCode names the agent with its -opencode suffix" "agent: openspec-proposer-standard-opencode" $RC next --store store-oc --name feat-oc
+check_line "next on OpenCode names the agent without a suffix" "agent: openspec-proposer-standard" $RC next --store store-oc --name feat-oc
+check_not "next on OpenCode prints no -opencode name" "-opencode" $RC next --store store-oc --name feat-oc
 
 # model catalogue: newest version per family, a different family as fallback
 check_out "model get prints a fallback from the next family" "fallback: gpt-6.1-sol" $RC model get --store store-host --tier deep

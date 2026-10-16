@@ -71,24 +71,28 @@ while IFS=: read -r role s; do
   check "role prompt $role quotes: $s" grep -qF -- "$s" "$SKILL/scripts/roles/$role.md"
 done <<<"$ROLE_INVARIANTS"
 
-# role agents: agents/openspec-<role>/AGENT.md = frontmatter + the role prompt verbatim
+# role agents: agents/claude-code/openspec-<role>-<tier>/AGENT.md = frontmatter + the role prompt verbatim
 AGENT_EFFORT='proposer:high
 critic:high
 verifier:high
 unit-critic:medium
 worker:medium'
 while IFS=: read -r role eff; do
-  af="agents/openspec-$role/AGENT.md"
-  check "agent file exists for $role" test -f "$af"
-  check "agent $role names itself openspec-$role" grep -qx "name: openspec-$role" "$af"
-  check "agent $role runs at effort $eff" grep -qx "effort: $eff" "$af"
-  check "agent $role body is the role prompt verbatim" bash -c "diff <(awk 'c>=2{print} /^---$/{c++}' '$af') '$SKILL/scripts/roles/$role.md'"
-  check_fails "agent $role grants no Agent tool" grep -E '^tools:.*\bAgent\b' "$af"
+  for tier in mechanical standard deep max; do
+    af="agents/claude-code/openspec-$role-$tier/AGENT.md"
+    check "agent file exists for $role $tier" test -f "$af"
+    check "agent $role $tier runs at effort $eff" grep -qx "effort: $eff" "$af"
+    check "agent $role $tier body is the role prompt verbatim" bash -c "diff <(awk 'c>=2{print} /^---$/{c++}' '$af') '$SKILL/scripts/roles/$role.md'"
+    check_fails "agent $role $tier grants no Agent tool" grep -E '^tools:.*\bAgent\b' "$af"
+  done
 done <<<"$AGENT_EFFORT"
 for role in critic verifier unit-critic; do
-  check_fails "checker agent $role has no Edit tool" grep -E '^tools:.*\bEdit\b' agents/openspec-$role/AGENT.md
+  for tier in mechanical standard deep max; do
+    check_fails "checker agent $role $tier has no Edit tool" grep -E '^tools:.*\bEdit\b' agents/claude-code/openspec-$role-$tier/AGENT.md
+  done
 done
-check "catalog lists the five role agents" bash -c "[ \$(python3 -c \"import json;print(sum(not k.endswith(('-claude-code','-cursor','-copilot','-codex','-opencode')) for k in json.load(open('atlas-catalog.json'))['agents']))\") -eq 5 ]"
+check "agents/ holds exactly the five tool directories" test "$(ls agents | tr '\n' ' ')" = "claude-code codex copilot cursor opencode "
+check "every AGENT.md name equals its directory name" bash -c 'for f in $(find agents -name AGENT.md); do [ "$(sed -n "s/^name: //p" "$f")" = "$(basename "$(dirname "$f")")" ] || exit 1; done'
 
 for tool in claude-code cursor copilot codex opencode; do
   for tier in mechanical standard deep max; do
@@ -97,16 +101,15 @@ for tool in claude-code cursor copilot codex opencode; do
 done
 
 # per-tool agents: generated, 20 per tool, model pinned to the catalogue default
-h_before="$(find agents atlas-catalog.json -type f | sort | xargs shasum | shasum)"
+h_before="$(find agents -type f | sort | xargs shasum | shasum)"
 ./tools/build-agents.sh >/dev/null
-check "build-agents.sh output is committed (no drift)" test "$h_before" = "$(find agents atlas-catalog.json -type f | sort | xargs shasum | shasum)"
+check "build-agents.sh output is committed (no drift)" test "$h_before" = "$(find agents -type f | sort | xargs shasum | shasum)"
 for tool in claude-code cursor copilot codex opencode; do
   check "$tool ships 20 per-tier agents" test "$(find agents/$tool -name AGENT.md | wc -l | tr -d ' ')" = 20
 done
 check "claude-code critic-max pins the max default" grep -qx "model: $(bash -c "source $SKILL/scripts/lib.sh; model_pick claude-code max 1")" agents/claude-code/openspec-critic-max/AGENT.md
 check "copilot agents carry a two-item model list" grep -qE "^model: \['[^']+', '[^']+'\]$" agents/copilot/openspec-worker-standard/AGENT.md
 check_fails "cursor checker agents are not readonly (they write their report)" grep -qx "readonly: true" agents/cursor/openspec-verifier-deep/AGENT.md
-check "catalog lists 100 per-tool agents" bash -c "[ \$(python3 -c \"import json;print(sum(k.endswith(('-claude-code','-cursor','-copilot','-codex','-opencode')) for k in json.load(open('atlas-catalog.json'))['agents']))\") -eq 100 ]"
 
 # standalone install: one home, linked into each tool's dirs
 IH="$TMP/install-home"
@@ -116,7 +119,8 @@ done
 check "claude-code agent links into the home" test -L "$IH/.claude/agents/openspec-critic-max"
 check "cursor agent is a flat .md link" test -L "$IH/.cursor/agents/openspec-critic-max.md"
 check "copilot agent is a .agent.md link" test -L "$IH/.copilot/agents/openspec-critic-max.agent.md"
-check "opencode uses ~/.config/opencode and the -opencode suffix" test -L "$IH/.config/opencode/agents/openspec-critic-max-opencode.md"
+check "opencode uses ~/.config/opencode" test -L "$IH/.config/opencode/agents/openspec-critic-max.md"
+check "opencode installs no -opencode.md link" bash -c "! ls $IH/.config/opencode/agents | grep -q -- -opencode.md"
 check "skill dir links into the home" test -L "$IH/.codex/skills/openspec-orchestrator"
 check "codex agents are TOML with model and effort keys" python3 -c "import tomllib,sys; d=tomllib.load(open('$IH/.codex/agents/openspec-verifier-deep.toml','rb')); sys.exit(0 if d['model']=='gpt-6-astra' and d['model_reasoning_effort']=='high' and d['developer_instructions'].startswith('You are') else 1)"
 ih1="$(cd "$IH" && find . | sort | shasum)"
@@ -182,7 +186,7 @@ check "SKILL.md names at least one prompt: line" bash -c "[ \$(grep -c 'prompt:'
 
 # docs: grill mode replaces /sdd:explore as the only pre-change mode —
 # see specs/grill-mode/spec.md
-for f in $SKILL/SKILL.md README.md atlas-catalog.json; do
+for f in $SKILL/SKILL.md README.md; do
   check "$f has no /sdd:explore" bash -c "[ \$(grep -c '/sdd:explore' $f) -eq 0 ]"
 done
 check "SKILL.md has exactly one '## Grill mode' heading" bash -c "[ \$(grep -c '^## Grill mode$' $SKILL/SKILL.md) -eq 1 ]"
@@ -220,8 +224,6 @@ check "SKILL.md Guardrails section names Project glossary" grep -qF -- "Project 
 check "SKILL.md Guardrails section names grill mode" grep -qF -- "grill mode" "$gr_tmp"
 
 skill_desc="$(sed -n 's/^description: //p' $SKILL/SKILL.md | sed -n 1p)"
-catalog_desc="$(sed -n 's/.*"description": "\(.*\)",$/\1/p' atlas-catalog.json | sed -n 1p)"
-check "SKILL.md and atlas-catalog.json descriptions are identical" test "$skill_desc" = "$catalog_desc"
 case "$skill_desc" in
   *"grill mode"*) echo "ok   SKILL.md description names grill mode" ;;
   *) echo "FAIL SKILL.md description names grill mode"; fails=$((fails+1)) ;;
