@@ -103,6 +103,7 @@ done
 # per-tool agents: generated, 20 per tool, model pinned to the catalogue default
 h_before="$(find agents -type f | sort | xargs shasum | shasum)"
 ./tools/build-agents.sh >/dev/null
+check_fails "build-agents.sh writes no atlas-catalog.json" test -e atlas-catalog.json
 check "build-agents.sh output is committed (no drift)" test "$h_before" = "$(find agents -type f | sort | xargs shasum | shasum)"
 for tool in claude-code cursor copilot codex opencode; do
   check "$tool ships 20 per-tier agents" test "$(find agents/$tool -name AGENT.md | wc -l | tr -d ' ')" = 20

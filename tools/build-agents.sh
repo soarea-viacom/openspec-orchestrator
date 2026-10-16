@@ -16,8 +16,8 @@ critic:high:Read, Write, Bash, Grep, Glob:Proposal critic — fresh read of a dr
 verifier:high:Read, Write, Bash, Grep, Glob:Verify — grades the committed change against the proposal and its Guardrails
 unit-critic:medium:Read, Write, Bash, Grep, Glob:Unit critic — fresh read of one green unit, checks first, then code, then screenshot
 worker:medium:Read, Write, Edit, Bash, Grep, Glob:Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list'
-# Copilot takes a priority list, so it carries the fallback too; Codex's
-# model is written into real TOML by tools/install.sh, not read from here.
+# Copilot takes a priority list, so it carries the fallback too;
+# tools/install.sh converts the Codex frontmatter to TOML.
 ROLE_SRC="$ROLES"
 source skills/openspec-orchestrator/scripts/lib.sh
 TOOLS="claude-code cursor copilot codex opencode"

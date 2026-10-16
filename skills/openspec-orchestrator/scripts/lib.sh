@@ -1115,16 +1115,14 @@ pillars_trivial() {
 # emit_role_lines <slug> <action> -> for a role-bearing action prints
 # `prompt: <path>`, then `overlay: <path>` when the store has an overlay
 # for that role.
-# role_agent <role> <tier> -> the agent definition the orchestrator
-# dispatches this role as: one per role and tier, generated per tool with
-# that tier's default model pinned (tools/build-agents.sh). The model is
+# role_agent <slug> <role> <tier> [model] -> the installed agent's name: one
+# per role and tier, generated per tool (tools/build-agents.sh). The model is
 # also passed on the dispatch, which wins where the host supports it.
-# role_agent <slug> <role> <tier> [model] -> the installed agent's name.
 # Agents pin their tier's default model, and on hosts without per-dispatch
 # model selection the file is what sets it, so a dispatch running on another
 # tier's default (a checker on its fallback) names that tier's agent.
 role_agent() {
-  local tool; tool="$(host_tool "$1")" || return 1
+  host_tool "$1" >/dev/null || return 1
   local tier="$3" t
   if [ -n "${4:-}" ] && [ "$(model_for_tier "$1" "$3" 2>/dev/null)" != "$4" ]; then
     for t in $TIERS; do [ "$(model_for_tier "$1" "$t" 2>/dev/null)" = "$4" ] && { tier="$t"; break; }; done
