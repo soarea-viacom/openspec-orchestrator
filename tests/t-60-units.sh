@@ -30,6 +30,19 @@ check "units check: overlap ok once ordered by a dep" $RC units check --store te
 $RC state set --store teststore --name feat-units units "a=x.js,y.js" unit_deps "" seams "s=x.js"
 check_err "units check: file outside seams named" "y.js" $RC units check --store teststore --name feat-units
 
+# a trailing slash names a directory: it covers every path under it in
+# seams, units and the merge scope, and counts as one entry
+$RC state set --store teststore --name feat-units units "a=agents/x/AGENT.md" unit_deps "" seams "s=agents/"
+check "units check: a seam directory entry covers a file under it" $RC units check --store teststore --name feat-units
+$RC state set --store teststore --name feat-units units "a=agents" seams "s=agents/"
+check_err "units check: without the trailing slash an entry is a plain path" "file 'agents'" $RC units check --store teststore --name feat-units
+$RC state set --store teststore --name feat-units units "a=agents/;b=agents/x/AGENT.md" unit_deps "" seams "s=agents/"
+check_err "units check: a directory entry and a file under it overlap" "no dep path" $RC units check --store teststore --name feat-units
+$RC state set --store teststore --name feat-units unit_deps "b=a"
+check "units check: directory overlap ok once ordered by a dep" $RC units check --store teststore --name feat-units
+$RC state set --store teststore --name feat-units units "a=gen/" unit_deps "" seams "s=gen/" unit_tasks ""
+check "units check: a directory entry counts as one file toward the cap" $RC units check --store teststore --name feat-units
+
 $RC state set --store teststore --name feat-units units "A_b=x.js" seams "s=x.js"
 check_err "units check: bad kebab-case name rejected" "bad unit name" $RC units check --store teststore --name feat-units
 
@@ -287,6 +300,24 @@ before_tip="$(git -C "$MPROJECT" rev-parse change/feat-scope)"
 check_err "merge: out-of-scope file named and refused" "b.js" $RC unit merge --store teststore --project "$MPROJECT" --name feat-scope --unit a
 check "merge: out-of-scope refusal leaves change branch unchanged" test "$before_tip" = "$(git -C "$MPROJECT" rev-parse change/feat-scope)"
 $RC workspace remove --store teststore --project "$MPROJECT" --name feat-scope
+
+# a directory entry covers paths added, changed or deleted under it
+$RC state init --store teststore --name feat-dir
+$RC state set --store teststore --name feat-dir seams "s=src/,a.js" units "a=src/" unit_deps ""
+$RC workspace create --store teststore --project "$MPROJECT" --name feat-dir >/dev/null 2>&1
+dwt="$($RC unit create --store teststore --project "$MPROJECT" --name feat-dir --unit a)"
+mkdir -p "$dwt/src/deep"; echo n > "$dwt/src/deep/new.js"; git -C "$dwt" add -A && git -C "$dwt" commit -qm "adds under src/"
+$RC unit set --store teststore --name feat-dir --unit a status reviewed
+check "merge: a directory entry covers a new file under it" $RC unit merge --store teststore --project "$MPROJECT" --name feat-dir --unit a
+check_out "merge: the directory-covered unit is merged" "status: merged" $RC unit get --store teststore --name feat-dir --unit a
+$RC state init --store teststore --name feat-dir2
+$RC state set --store teststore --name feat-dir2 seams "s=src,a.js" units "a=src" unit_deps ""
+$RC workspace create --store teststore --project "$MPROJECT" --name feat-dir2 >/dev/null 2>&1
+dwt2="$($RC unit create --store teststore --project "$MPROJECT" --name feat-dir2 --unit a)"
+mkdir -p "$dwt2/src"; echo n > "$dwt2/src/new.js"; git -C "$dwt2" add -A && git -C "$dwt2" commit -qm "adds under src without a directory entry"
+$RC unit set --store teststore --name feat-dir2 --unit a status reviewed
+check_err "merge: without the trailing slash 'src' does not cover src/new.js" "src/new.js" $RC unit merge --store teststore --project "$MPROJECT" --name feat-dir2 --unit a
+$RC workspace remove --store teststore --project "$MPROJECT" --name feat-dir2
 
 # dep not merged refused (no real worktree needed: the dep check is state-only)
 $RC state init --store teststore --name feat-mdep

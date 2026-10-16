@@ -599,15 +599,16 @@ cmd_unit_merge() {
   fi
 
   # Scope check: the unit branch's diff from its merge-base with
-  # change/<name> may only touch the unit's own files.
+  # change/<name> may only touch the unit's own files (a directory entry
+  # covers every path under it).
   local units_v; units_v="$(state_field "$f" units)"
-  local allowed; allowed=",$(map_get "$units_v" "$UNIT"),"
+  local allowed; allowed="$(map_get "$units_v" "$UNIT")"
   local mb; mb="$(git -C "$unit_wt" merge-base "change/$NAME" "$branch")"
   local changed; changed="$(git -C "$unit_wt" diff --name-only "$mb" "$branch")"
   local bad="" line
   while IFS= read -r line; do
     [ -n "$line" ] || continue
-    case "$allowed" in *",$line,"*) ;; *) bad="$bad $line" ;; esac
+    path_covered "$line" "$allowed" || bad="$bad $line"
   done <<< "$changed"
   if [ -n "$bad" ]; then
     echo "unit $UNIT: outside unit files:$bad" >&2

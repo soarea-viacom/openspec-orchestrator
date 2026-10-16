@@ -552,6 +552,33 @@ unit_max_files() { local v; v="$(orch_scalar "$1" unit_max_files)"; echo "${v:-$
 unit_max_tasks() { local v; v="$(orch_scalar "$1" unit_max_tasks)"; echo "${v:-$UNIT_MAX_TASKS}"; }
 count_csv() { printf '%s' "$1" | tr ',' '\n' | grep -c . || true; }
 
+# path_covered <path> <csv-list> -- the list names the path: an entry equal
+# to it, or a directory entry (trailing slash) that prefixes it. Directory
+# entries let a unit own a generated tree without naming every file, and
+# count as one entry toward the size cap.
+path_covered() {
+  local p="$1" one old_ifs="$IFS"; IFS=','
+  for one in $2; do
+    [ -n "$one" ] || continue
+    if [ "$one" = "$p" ]; then IFS="$old_ifs"; return 0; fi
+    case "$one" in */) case "$p" in "$one"*) IFS="$old_ifs"; return 0 ;; esac ;; esac
+  done
+  IFS="$old_ifs"; return 1
+}
+# entries_overlap <csv-a> <csv-b> -> an entry of a that b covers, or a
+# directory entry of a that covers an entry of b; nothing when disjoint.
+entries_overlap() {
+  local one two old_ifs="$IFS"; IFS=','
+  for one in $1; do
+    [ -n "$one" ] || continue
+    if path_covered "$one" "$2"; then IFS="$old_ifs"; echo "$one"; return 0; fi
+    case "$one" in */)
+      for two in $2; do case "$two" in "$one"*) IFS="$old_ifs"; echo "$one"; return 0 ;; esac; done ;;
+    esac
+  done
+  IFS="$old_ifs"; return 1
+}
+
 # units_check <store-slug> <name> -- state-only: reads the change's units,
 # unit_deps, unit_tasks, seams fields and nothing else (no tasks.md, no
 # worktree). Replaces an LLM critique of the split with mechanical
@@ -595,17 +622,10 @@ units_check() {
   done
 
   # seam files: union of every seams group's file list
-  local seam_files=","
+  local seam_files=""
   local sk
   for sk in $(map_keys "$seams_v"); do
-    local sf; sf="$(map_get "$seams_v" "$sk")"
-    local old_ifs="$IFS"; IFS=','
-    local one
-    for one in $sf; do
-      [ -n "$one" ] || continue
-      seam_files="$seam_files$one,"
-    done
-    IFS="$old_ifs"
+    seam_files="$seam_files,$(map_get "$seams_v" "$sk")"
   done
   for u in $units_list; do
     local files; files="$(map_get "$units_v" "$u")"
@@ -613,10 +633,7 @@ units_check() {
     local one
     for one in $files; do
       [ -n "$one" ] || continue
-      case "$seam_files" in
-        *",$one,"*) ;;
-        *) echo "units check: file '$one' (unit '$u') is not in any seams list" >&2; return 1 ;;
-      esac
+      path_covered "$one" "$seam_files" || { IFS="$old_ifs"; echo "units check: file '$one' (unit '$u') is not in any seams list" >&2; return 1; }
     done
     IFS="$old_ifs"
   done
@@ -691,15 +708,7 @@ units_check() {
   for ((i = 0; i < ${#ulist[@]}; i++)); do
     for ((j = i + 1; j < ${#ulist[@]}; j++)); do
       local ua="${ulist[$i]}" ub="${ulist[$j]}"
-      local fa; fa="$(map_get "$units_v" "$ua")"
-      local overlap=""
-      local old_ifs="$IFS"; IFS=','
-      local one
-      for one in $fa; do
-        [ -n "$one" ] || continue
-        case ",$(map_get "$units_v" "$ub")," in *",$one,"*) overlap="$one"; break ;; esac
-      done
-      IFS="$old_ifs"
+      local overlap; overlap="$(entries_overlap "$(map_get "$units_v" "$ua")" "$(map_get "$units_v" "$ub")" || true)"
       if [ -n "$overlap" ]; then
         if ! _units_depends_on "$ua" "$ub" && ! _units_depends_on "$ub" "$ua"; then
           echo "units check: '$ua' and '$ub' both list '$overlap' with no dep path between them" >&2
