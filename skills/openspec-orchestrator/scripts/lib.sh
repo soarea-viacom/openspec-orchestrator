@@ -1122,17 +1122,14 @@ pillars_trivial() {
 # role_agent <slug> <role> <tier> [model] -> the installed agent's name.
 # Agents pin their tier's default model, and on hosts without per-dispatch
 # model selection the file is what sets it, so a dispatch running on another
-# tier's default (a checker on its fallback) names that tier's agent. OpenCode
-# names an agent by its file, and Atlas files it under the catalog key, which
-# carries the -opencode suffix; tools/install.sh matches that.
+# tier's default (a checker on its fallback) names that tier's agent.
 role_agent() {
   local tool; tool="$(host_tool "$1")" || return 1
   local tier="$3" t
   if [ -n "${4:-}" ] && [ "$(model_for_tier "$1" "$3" 2>/dev/null)" != "$4" ]; then
     for t in $TIERS; do [ "$(model_for_tier "$1" "$t" 2>/dev/null)" = "$4" ] && { tier="$t"; break; }; done
   fi
-  local suffix=""; [ "$tool" != opencode ] || suffix="-opencode"
-  echo "openspec-$2-$tier$suffix"
+  echo "openspec-$2-$tier"
 }
 
 # emit_fallback <slug> <tier> <model> -> `fallback_model:` for a model-bearing
