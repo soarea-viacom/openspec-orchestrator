@@ -23,6 +23,9 @@ def parse_md(text):
         m = re.fullmatch(r"## (\d+\.\d+\.\d+)", line.rstrip())
         if m:
             cur = m.group(1); out[cur] = []
+        elif line.startswith("## "):
+            print(f"CHANGELOG.md: malformed Release heading: {line}", file=sys.stderr)
+            sys.exit(1)
         elif cur and line.strip():
             out[cur].append(line.strip())
     return {k: "\n".join(v) for k, v in out.items()}
