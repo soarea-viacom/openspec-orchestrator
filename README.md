@@ -125,11 +125,14 @@ wherever your tool loads skills from. From a checkout:
 tools/install.sh --tool claude-code
 ```
 
-`--tool` is one of `claude-code`, `cursor`, `copilot`, `codex`, `opencode`; add
+`--tool` is one of `claude-code`, `cursor`, `copilot`, `codex`, `opencode`, `agents`; add
 `--project <dir>` for a project-level install. The script copies the skill and that tool's
 20 per-tier agents into one home (`~/.local/share/openspec-orchestrator/`) and symlinks them
 into the tool's directories, so every tool reads the same files; `--copy` copies instead,
-for tools that don't follow symlinks. Codex agents are written as TOML with `model` and
+for tools that don't follow symlinks. `--tool agents` installs the skill alone into
+`~/.agents/skills` (`<project>/.agents/skills` with `--project`), the shared skills directory
+every tool can point at; add each tool's agent definitions beside it with
+`--tool <tool> --agents-only`, which leaves that tool's skills directory alone. Codex agents are written as TOML with `model` and
 `model_reasoning_effort` set. `--uninstall` removes only what it installed. Minimal Claude
 Code install:
 

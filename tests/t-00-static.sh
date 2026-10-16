@@ -142,6 +142,19 @@ check "install.sh linked the skill under the spaced home" test -L "$IHS/.cursor/
 check "install.sh handles a project with a space" env HOME="$IHS" XDG_DATA_HOME= tools/install.sh --tool codex --project "$PS"
 check "install.sh linked an agent under the spaced project" test -L "$PS/.codex/agents/openspec-critic-max.toml"
 env HOME="$IHS" XDG_DATA_HOME= tools/install.sh --tool cursor --uninstall
+# shared ~/.agents/skills: the skill alone, each tool's agents added beside it
+SH="$TMP/shared-home"
+check "install.sh --tool agents installs the skill into ~/.agents/skills" env HOME="$SH" XDG_DATA_HOME= tools/install.sh --tool agents
+check "shared skills dir holds the skill" test -L "$SH/.agents/skills/openspec-orchestrator"
+check "--tool agents installs no agent definitions" test ! -e "$SH/.local/share/openspec-orchestrator/agents/agents"
+check "--agents-only adds a tool's agents beside the shared skill" env HOME="$SH" XDG_DATA_HOME= CLAUDE_CONFIG_DIR= tools/install.sh --tool cursor --agents-only
+check "--agents-only leaves the tool's skills dir alone" test ! -e "$SH/.cursor/skills"
+check "--agents-only still links the tool's agents" test -L "$SH/.cursor/agents/openspec-critic-max.md"
+check "--agents-only keeps the shared skill in the home" test -d "$SH/.local/share/openspec-orchestrator/skill"
+check_err "--agents-only with --tool agents is refused" "agent definitions" tools/install.sh --tool agents --agents-only
+env HOME="$SH" XDG_DATA_HOME= tools/install.sh --tool agents --uninstall
+check "uninstall removes the shared skill link" test ! -e "$SH/.agents/skills/openspec-orchestrator"
+check "uninstalling the shared skill leaves the tool's agents" test -L "$SH/.cursor/agents/openspec-critic-max.md"
 check "uninstall handles a home with a space" test ! -e "$IHS/.cursor/agents/openspec-critic-max.md"
 check "no doc names Claude Code's Agent tool or subagent_type" bash -c "cd $SKILL && ! grep -rnE 'Agent tool|Agent call|subagent_type|Skill tool' SKILL.md AUTONOMOUS-ORCHESTRATION.md CONTEXT.md scripts/lib.sh scripts/roles ../../agents"
 
