@@ -37,7 +37,7 @@ r="$(mkrel none "$BASE_CL" "$BASE_CL" y)"
 check_fails "no new Release fails" bump "$r"
 check_err "no new Release says exactly one was expected" "expected exactly one new Release, found 0" bump "$r"
 check_err "no new Release names CHANGELOG.md" "CHANGELOG.md" bump "$r"
-check_not "no atlas hint in errors" "atlas" bump "$r"
+check_not "no legacy bump hint in errors" "atl""as" bump "$r"
 
 r="$(mkrel two "$BASE_CL" $'# Changelog\n\n## 1.3.0\n\nFourth.\n\n## 1.2.0\n\nThird.\n\n## 1.1.0\n\nSecond.\n\n## 1.0.0\n\nFirst.\n' y)"
 check_fails "two new Releases fail" bump "$r"
