@@ -20,9 +20,9 @@
 
 ## 4. Change verification (whole change, after all units merge)
 
-- [ ] 4.1 `openspec validate remove-atlas-integration --strict`, run from the change worktree, passes (in local mode the change directory exists only on the branch, so `--store` answers "Unknown item").
-- [ ] 4.2 Guardrails hold against `main`: `git diff main -- skills/openspec-orchestrator/scripts/run-change` is empty; `git diff -U0 main -- skills/openspec-orchestrator/scripts/lib.sh` touches only `role_agent` and its comment; `git diff --name-only --diff-filter=MDR main -- openspec/changes/archive openspec/CONTEXT.md openspec/adr docs/research .claude` is empty; `git diff --name-only main -- tests` lists only `tests/t-00-static.sh`, `tests/t-20-models.sh`, `tests/t-85-release.sh`; no new dependency manifest or tool appears (`git diff --name-only --diff-filter=A main` lists only `CHANGELOG.md`, `tests/t-85-release.sh`, `openspec/CONTEXT.md`, `openspec/adr/*` and `openspec/changes/remove-atlas-integration/**`).
-- [ ] 4.3 `./tests/run.sh` green and `tools/check-release-bump.sh main` exits 0 printing `3.0.0`.
+- [x] 4.1 `openspec validate remove-atlas-integration --strict`, run from the change worktree, passes (in local mode the change directory exists only on the branch, so `--store` answers "Unknown item").
+- [x] 4.2 Guardrails hold against `main`: `git diff main -- skills/openspec-orchestrator/scripts/run-change` is empty; `git diff -U0 main -- skills/openspec-orchestrator/scripts/lib.sh` touches only `role_agent` and its comment; `git diff --name-only --diff-filter=MDR main -- openspec/changes/archive openspec/CONTEXT.md openspec/adr docs/research .claude` is empty; `git diff --name-only main -- tests` lists only `tests/t-00-static.sh`, `tests/t-20-models.sh`, `tests/t-85-release.sh`; no new dependency manifest or tool appears (`git diff --name-only --diff-filter=A main` lists only `CHANGELOG.md`, `tests/t-85-release.sh`, `openspec/CONTEXT.md`, `openspec/adr/*` and `openspec/changes/remove-atlas-integration/**`).
+- [x] 4.3 `./tests/run.sh` green and `tools/check-release-bump.sh main` exits 0 printing `3.0.0`.
 
 ## 5. Post-merge (manual)
 
