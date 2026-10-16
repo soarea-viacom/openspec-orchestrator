@@ -103,7 +103,7 @@ done
 # per-tool agents: generated, 20 per tool, model pinned to the catalogue default
 h_before="$(find agents -type f | sort | xargs shasum | shasum)"
 ./tools/build-agents.sh >/dev/null
-check_fails "build-agents.sh writes no atlas-catalog.json" test -e atlas-catalog.json
+check_fails "build-agents.sh writes no [a]tlas-catalog.json" test -e "atl""as-catalog.json"
 check "build-agents.sh output is committed (no drift)" test "$h_before" = "$(find agents -type f | sort | xargs shasum | shasum)"
 for tool in claude-code cursor copilot codex opencode; do
   check "$tool ships 20 per-tier agents" test "$(find agents/$tool -name AGENT.md | wc -l | tr -d ' ')" = 20
@@ -271,13 +271,13 @@ check_out_empty() { # check_out_empty <desc> <cmd...> -- the command must print 
   out="$("$@" 2>&1 || true)"
   if [ -z "$out" ]; then echo "ok   $desc"; else echo "FAIL $desc"; printf '%s\n' "$out" | sed 's/^/     /'; fails=$((fails+1)); fi
 }
-check_out_empty "no Atlas mention outside the excluded history paths" \
+check_out_empty "no [a]tlas mention outside the excluded history paths" \
   git grep --untracked -n -i '[a]tlas' -- . ':!.orchestration' ':!.claude' ':!openspec/changes' \
   ':!openspec/specs' ':!openspec/CONTEXT.md' ':!openspec/adr' ':!docs/research' ':!CHANGELOG.md'
 
 doc_files="README.md $SKILL/SKILL.md $SKILL/AUTONOMOUS-ORCHESTRATION.md $SKILL/CONTEXT.md"
 for f in $doc_files; do
-  check "$f names no Atlas" test "$({ grep -ci atlas "$f" || true; } | head -1)" = 0
+  check "$f names no [a]tlas" test "$({ grep -ci "[a]tlas" "$f" || true; } | head -1)" = 0
 done
 for f in README.md $SKILL/SKILL.md $SKILL/AUTONOMOUS-ORCHESTRATION.md $SKILL/CONTEXT.md; do
   check "$f has no -opencode suffix" test "$({ grep -cF -- '-opencode' "$f" || true; } | head -1)" = 0

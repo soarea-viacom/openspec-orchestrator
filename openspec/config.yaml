@@ -10,16 +10,16 @@ schema: spec-driven
 #     Domain: e-commerce platform
 context: |
   This repo is the openspec-orchestrator engine itself, not a target project.
-  Everything a consumer installs lives under skills/openspec-orchestrator/:
-  SKILL.md, AUTONOMOUS-ORCHESTRATION.md, CONTEXT.md, scripts/ (run-change,
-  lib.sh, roles/) and releases.json — Atlas copies that directory whole, so
-  nothing the engine needs at run time may live outside it. tests/, openspec/,
-  docs/ and README.md stay at the repo root and are not installed. Tests are tests/run.sh, which runs the
+  The installed files are skills/openspec-orchestrator/ (SKILL.md,
+  AUTONOMOUS-ORCHESTRATION.md, CONTEXT.md, models.tsv, scripts/) and agents/.
+  The Installer copies the skill directory whole, so nothing the engine needs
+  at run time may live outside it. tests/, openspec/, docs/ and README.md stay
+  at the repo root and are not installed. Tests are tests/run.sh, which runs the
   independent tests/t-*.sh files in parallel (helpers in tests/lib.sh; the
-  no-caller function scan in t-00-static.sh is the dead-code pass). Every change to
-  SKILL.md or AUTONOMOUS-ORCHESTRATION.md bumps releases.json via
-  `atlas bump skill openspec-orchestrator --minor -m "..."`, never by hand;
-  one bump per change. Comments state non-obvious rationale only. A change
+  no-caller function scan in t-00-static.sh is the dead-code pass). Every change
+  to installed files adds exactly one Release (## <version>, newest first) to
+  the root CHANGELOG.md, which CI enforces with tools/check-release-bump.sh;
+  Comments state non-obvious rationale only. A change
   that adds an orchestration.* key, a role, or a convention updates the
   example block and this context in the same change; Verify warns otherwise.
   orchestration.tool names the host agent tool (claude-code, cursor, copilot,
