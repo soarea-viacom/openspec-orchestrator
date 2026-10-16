@@ -18,7 +18,7 @@ context: |
   independent tests/t-*.sh files in parallel (helpers in tests/lib.sh; the
   no-caller function scan in t-00-static.sh is the dead-code pass). Every change
   to installed files adds exactly one Release (## <version>, newest first) to
-  the root CHANGELOG.md, which CI enforces with tools/check-release-bump.sh;
+  the root CHANGELOG.md, which CI enforces with tools/check-release-bump.sh.
   Comments state non-obvious rationale only. A change
   that adds an orchestration.* key, a role, or a convention updates the
   example block and this context in the same change; Verify warns otherwise.

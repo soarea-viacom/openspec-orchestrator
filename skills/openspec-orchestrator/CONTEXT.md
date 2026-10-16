@@ -272,7 +272,7 @@
   ever committed.
 - **Role agent**: the agent definition for a role at a tier on a host tool,
   `openspec-<role>-<tier>` (`agents/<tool>/openspec-<role>-<tier>/AGENT.md`
-  here; the name is the same on every host), body = the role prompt verbatim,
+  here, installed by `tools/install.sh`; the name is the same on every host), body = the role prompt verbatim,
   frontmatter = the tier's default model from `models.tsv` plus what the
   host can express: effort (`high` proposer/critic/verifier, `medium`
   unit-critic/worker) on Claude Code and Codex, the tool allowlist (no

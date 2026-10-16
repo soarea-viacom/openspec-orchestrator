@@ -5,8 +5,7 @@
 An agent skill for spec-driven development on top
 of [OpenSpec](https://github.com/Fission-AI/OpenSpec): draft a delta spec, critique it,
 implement it, gate and verify it, archive it into the living spec. Execution is
-autonomous end to end, with two defined human checkpoints. Runs on every agent tool
-Runs on Claude Code, Cursor, VS Code/Copilot, Codex and OpenCode.
+autonomous end to end, with two defined human checkpoints. Runs on Claude Code, Cursor, VS Code/Copilot, Codex and OpenCode.
 
 This repository is the engine, not a target project. Everything a consumer installs lives
 under `skills/openspec-orchestrator/`; the rest of the repo is tests, design records and

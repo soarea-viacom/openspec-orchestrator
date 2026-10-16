@@ -103,7 +103,7 @@ done
 # per-tool agents: generated, 20 per tool, model pinned to the catalogue default
 h_before="$(find agents -type f | sort | xargs shasum | shasum)"
 ./tools/build-agents.sh >/dev/null
-check_fails "build-agents.sh writes no [a]tlas-catalog.json" test -e "atl""as-catalog.json"
+check_fails "build-agents.sh writes no catalog file" test -e "atl""as-catalog.json"
 check "build-agents.sh output is committed (no drift)" test "$h_before" = "$(find agents -type f | sort | xargs shasum | shasum)"
 for tool in claude-code cursor copilot codex opencode; do
   check "$tool ships 20 per-tier agents" test "$(find agents/$tool -name AGENT.md | wc -l | tr -d ' ')" = 20
@@ -271,23 +271,27 @@ check_out_empty() { # check_out_empty <desc> <cmd...> -- the command must print 
   out="$("$@" 2>&1 || true)"
   if [ -z "$out" ]; then echo "ok   $desc"; else echo "FAIL $desc"; printf '%s\n' "$out" | sed 's/^/     /'; fails=$((fails+1)); fi
 }
-check_out_empty "no [a]tlas mention outside the excluded history paths" \
+check_out_empty "no mention of the removed distribution tool outside the excluded history paths" \
   git grep --untracked -n -i '[a]tlas' -- . ':!.orchestration' ':!.claude' ':!openspec/changes' \
   ':!openspec/specs' ':!openspec/CONTEXT.md' ':!openspec/adr' ':!docs/research' ':!CHANGELOG.md'
 
 doc_files="README.md $SKILL/SKILL.md $SKILL/AUTONOMOUS-ORCHESTRATION.md $SKILL/CONTEXT.md"
 for f in $doc_files; do
-  check "$f names no [a]tlas" test "$({ grep -ci "[a]tlas" "$f" || true; } | head -1)" = 0
+  check "$f has no mention of the removed distribution tool" test "$({ grep -ci "[a]tlas" "$f" || true; } | head -1)" = 0
 done
 for f in README.md $SKILL/SKILL.md $SKILL/AUTONOMOUS-ORCHESTRATION.md $SKILL/CONTEXT.md; do
   check "$f has no -opencode suffix" test "$({ grep -cF -- '-opencode' "$f" || true; } | head -1)" = 0
   check "$f has no legacy agents/openspec-<role>/" test "$({ grep -cF 'agents/openspec-<role>/' "$f" || true; } | head -1)" = 0
 done
-check "SKILL.md Step 0 names tools/install.sh --tool <tool>" grep -qF -- 'tools/install.sh --tool <tool>' $SKILL/SKILL.md
+check "SKILL.md Step 0 line names tools/install.sh --tool <tool>" bash -c "grep -- '^0\. \*\*Host tool' \"\$1\" | grep -qF -- 'tools/install.sh --tool <tool>'" _ $SKILL/SKILL.md
+for f in $doc_files; do
+  check "$f names tools/install.sh" grep -qF -- 'tools/install.sh' "$f"
+done
+check "README line names CHANGELOG.md and tools/check-release-bump.sh together" bash -c "grep -F CHANGELOG.md README.md | grep -qF tools/check-release-bump.sh"
 check "README keeps model_reasoning_effort" grep -qF -- 'model_reasoning_effort' README.md
 check "README keeps the agent load-time note" grep -qF -- 'Agent definitions load when a session starts' README.md
 cfg_ctx="$(awk '/^context:/{f=1;next} f&&/^[a-zA-Z_]+:/{exit} f' openspec/config.yaml)"
-for w in 'CHANGELOG.md' 'agents/' 'exactly one'; do
+for w in 'CHANGELOG.md' 'agents/' 'skills/openspec-orchestrator/' 'exactly one'; do
   check "config.yaml context contains $w" bash -c "printf '%s' \"\$1\" | grep -qF -- \"\$2\"" _ "$cfg_ctx" "$w"
 done
 
