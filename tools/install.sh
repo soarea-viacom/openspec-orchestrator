@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Standalone install (no Atlas). Places the skill and one tool's agents in a
+# Places the skill and one tool's agents in a
 # single home, then links each into the tool's own directories, so every
 # tool installed from this checkout reads the same files.
 #   install.sh --tool <claude-code|cursor|copilot|codex|opencode>
@@ -20,9 +20,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$TOOL" ] || { echo "--tool is required" >&2; exit 2; }
 
-# ENTRY is the agent file name with NAME replaced. OpenCode's carries the
-# -opencode suffix: that tool names an agent by its file and Atlas files it
-# under the catalog key, so next prints the same name for both installs.
+# ENTRY is the agent file name with NAME replaced.
 case "$TOOL:${PROJECT:+p}" in
   claude-code:)  SKILLS_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"; AGENTS_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/agents"; ENTRY=NAME ;;
   claude-code:p) SKILLS_DIR="$PROJECT/.claude/skills"; AGENTS_DIR="$PROJECT/.claude/agents"; ENTRY=NAME ;;
@@ -32,8 +30,8 @@ case "$TOOL:${PROJECT:+p}" in
   copilot:p)     SKILLS_DIR="$PROJECT/.github/skills"; AGENTS_DIR="$PROJECT/.github/agents"; ENTRY=NAME.agent.md ;;
   codex:)        SKILLS_DIR="$HOME/.codex/skills"; AGENTS_DIR="$HOME/.codex/agents"; ENTRY=NAME.toml ;;
   codex:p)       SKILLS_DIR="$PROJECT/.agents/skills"; AGENTS_DIR="$PROJECT/.codex/agents"; ENTRY=NAME.toml ;;
-  opencode:)     SKILLS_DIR="$HOME/.config/opencode/skills"; AGENTS_DIR="$HOME/.config/opencode/agents"; ENTRY=NAME-opencode.md ;;
-  opencode:p)    SKILLS_DIR="$PROJECT/.opencode/skills"; AGENTS_DIR="$PROJECT/.opencode/agents"; ENTRY=NAME-opencode.md ;;
+  opencode:)     SKILLS_DIR="$HOME/.config/opencode/skills"; AGENTS_DIR="$HOME/.config/opencode/agents"; ENTRY=NAME.md ;;
+  opencode:p)    SKILLS_DIR="$PROJECT/.opencode/skills"; AGENTS_DIR="$PROJECT/.opencode/agents"; ENTRY=NAME.md ;;
   *) echo "unknown tool $TOOL" >&2; exit 2 ;;
 esac
 

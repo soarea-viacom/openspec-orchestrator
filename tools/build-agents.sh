@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Generates agents/openspec-<role>/AGENT.md from the engine's role prompts.
-# The role prompt is the single source; the agent file adds only what a
-# prompt cannot carry: effort and the tool allowlist. tests/run.sh fails
-# when the two drift, so run this after editing scripts/roles/*.md.
+# Generates agents/<tool>/openspec-<role>-<tier>/AGENT.md from the engine's
+# role prompts. The role prompt is the single source; the agent file adds
+# only what a prompt cannot carry: the tier's model, effort and the tool
+# allowlist. tests/run.sh fails when the two drift, so run this after
+# editing scripts/roles/*.md.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 ROLES=skills/openspec-orchestrator/scripts/roles
@@ -15,29 +16,13 @@ critic:high:Read, Write, Bash, Grep, Glob:Proposal critic — fresh read of a dr
 verifier:high:Read, Write, Bash, Grep, Glob:Verify — grades the committed change against the proposal and its Guardrails
 unit-critic:medium:Read, Write, Bash, Grep, Glob:Unit critic — fresh read of one green unit, checks first, then code, then screenshot
 worker:medium:Read, Write, Edit, Bash, Grep, Glob:Worker — unit worker, fixer, sweep, merge-conflict agent or split, confined to its file list'
-while IFS=: read -r role effort tools desc; do
-  src="$ROLES/$role.md"
-  [ -f "$src" ] || { echo "missing $src" >&2; exit 1; }
-  out="agents/openspec-$role/AGENT.md"
-  mkdir -p "$(dirname "$out")"
-  {
-    printf -- '---\nname: openspec-%s\ndescription: %s. Dispatched by the openspec-orchestrator engine with the tier model on the dispatch; never invoke directly.\ntools: %s\neffort: %s\n---\n' "$role" "$desc" "$tools" "$effort"
-    cat "$src"
-  } > "$out"
-  echo "wrote $out ($effort)"
-done <<<"$TABLE"
-
-# Per-tool, per-tier agents: agents/<tool>/openspec-<role>-<tier>/AGENT.md
-# with that tier's default model pinned. Atlas copies one file to every
-# tool, so each tool's set is its own catalog entry (…-<tool>). Copilot takes
-# a priority list, so it carries the fallback too; Codex's Atlas wrapper
-# drops model:, which tools/install.sh writes into real TOML instead.
+# Copilot takes a priority list, so it carries the fallback too;
+# tools/install.sh converts the Codex frontmatter to TOML.
 ROLE_SRC="$ROLES"
 source skills/openspec-orchestrator/scripts/lib.sh
 TOOLS="claude-code cursor copilot codex opencode"
 TIER_LIST="mechanical standard deep max"
-rm -rf agents/claude-code agents/cursor agents/copilot agents/codex agents/opencode
-catalog_rows=""
+rm -rf agents
 while IFS=: read -r role effort tools desc; do
   for tool in $TOOLS; do
     for tier in $TIER_LIST; do
@@ -57,20 +42,7 @@ while IFS=: read -r role effort tools desc; do
         printf -- '---\n'
         cat "$ROLE_SRC/$role.md"
       } > "$out"
-      catalog_rows+="$name-$tool	$out	$desc, $tier tier, for $tool"$'\n'
     done
   done
 done <<<"$TABLE"
-echo "wrote $(find agents/claude-code agents/cursor agents/copilot agents/codex agents/opencode -name AGENT.md | wc -l | tr -d ' ') per-tool agents"
-
-printf '%s' "$catalog_rows" | python3 -c '
-import json, sys
-rows = [l.split("\t") for l in sys.stdin.read().splitlines() if l]
-p = "atlas-catalog.json"
-cat = json.load(open(p, encoding="utf-8"))
-agents = {k: v for k, v in cat["agents"].items() if not any(k == r[0] for r in rows) and not k.endswith(("-claude-code", "-cursor", "-copilot", "-codex", "-opencode"))}
-for name, path, desc in rows:
-    agents[name] = {"description": desc + ". Dispatched by the openspec-orchestrator engine.", "path": path, "teams": ["*"], "required": False}
-cat["agents"] = agents
-open(p, "w", encoding="utf-8").write(json.dumps(cat, indent=2, ensure_ascii=False) + "\n")
-'
+echo "wrote $(find agents -name AGENT.md | wc -l | tr -d ' ') agents"
