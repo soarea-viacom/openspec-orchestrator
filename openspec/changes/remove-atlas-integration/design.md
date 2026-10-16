@@ -29,17 +29,17 @@ This repository's `gate_quick` is `bash -n` only. Unit checks are `tests/t-*.sh`
 
 ### Units and seams
 
-There are three units, cut along three seams. Each unit has at most 7 file entries and 3 tasks.
+There are three units, cut along three seams. Each unit has at most 3 tasks. `release-metadata` and `docs` have at most 7 file entries; `agents-and-installer` has 12, recorded in `unit_size_ok`.
 
 | unit | files | deps |
 |---|---|---|
 | `release-metadata` | `CHANGELOG.md`, `skills/openspec-orchestrator/releases.json`, `tools/check-release-bump.sh`, `.github/workflows/ci.yml`, `tests/t-85-release.sh` | none |
-| `agents-and-installer` | `tools/build-agents.sh`, `tools/install.sh`, `agents/`, `atlas-catalog.json`, `skills/openspec-orchestrator/scripts/lib.sh`, `tests/t-00-static.sh`, `tests/t-20-models.sh` | none |
+| `agents-and-installer` | `tools/build-agents.sh`, `tools/install.sh`, `agents/`, `atlas-catalog.json`, `skills/openspec-orchestrator/scripts/lib.sh`, `tests/t-00-static.sh`, `tests/t-20-models.sh`, `agents/openspec-critic/AGENT.md`, `agents/openspec-proposer/AGENT.md`, `agents/openspec-unit-critic/AGENT.md`, `agents/openspec-verifier/AGENT.md`, `agents/openspec-worker/AGENT.md` | none |
 | `docs` | `README.md`, `.README.md.swp`, `skills/openspec-orchestrator/SKILL.md`, `skills/openspec-orchestrator/AUTONOMOUS-ORCHESTRATION.md`, `skills/openspec-orchestrator/CONTEXT.md`, `openspec/config.yaml`, `tests/t-00-static.sh` | `release-metadata`, `agents-and-installer` |
 
 `docs` depends on both other units for two reasons. First, its acceptance check is the repo-wide Atlas grep, which can only pass after the catalog, `releases.json` and the code comments are gone. Second, it shares `tests/t-00-static.sh` with `agents-and-installer`, and the dependency puts those two edits in order. `agents-and-installer` owns the catalog-related lines of `t-00-static.sh` because deleting the catalog breaks those lines at once (the `/sdd:explore` loop and the description comparison read the file).
 
-`agents/` is one seam entry. It holds about 100 generated files that `tools/build-agents.sh` regenerates. A worker never edits a file under `agents/` by hand. It changes the generator and reruns it.
+`agents/` holds about 100 generated files that `tools/build-agents.sh` regenerates. A worker never edits a file under `agents/` by hand. It changes the generator and reruns it. The engine's unit scope check matches changed paths exactly, so `agents/` does not cover the five deleted `agents/openspec-<role>/AGENT.md` files; they are listed as their own entries, which puts the unit at 12 entries and is why `unit_size_ok agents-and-installer` is recorded.
 
 ### Generator owns all of `agents/`
 

@@ -42,7 +42,7 @@ Guardrails: the engine's runtime behaviour does not change except the OpenCode a
 
 ## Unit size
 
-Every unit fits the cap (8 files, 3 tasks), so `unit_size_ok` is not needed. `agents/` counts as one entry because `tools/build-agents.sh` regenerates the whole directory.
+`release-metadata` and `docs` fit the cap (8 files, 3 tasks). `agents-and-installer` has 12 entries: the engine's unit scope check matches changed paths exactly, so `agents/` does not cover the five deleted `agents/openspec-<role>/AGENT.md` files and the unit lists them explicitly. `unit_size_ok agents-and-installer` is recorded because those five are generator-owned deletions, not hand edits.
 
 ## Impact
 
