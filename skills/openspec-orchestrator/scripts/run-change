@@ -38,6 +38,7 @@ usage: run-change <command> [args]
   model critic   --store <slug> --name <change> [--unit <u>]
   stage-skills get --store <slug> --stage plan|critic|test
   roles get      --store <slug> --role proposer|critic|worker|unit-critic|verifier
+  openspec       --store <slug> [--name <change>] -- <openspec args>
   roles prompt   --store <slug> --role proposer|critic|worker|unit-critic|verifier
   merge-lane run --store <slug> --project <path> --name <change>
   tasks open     --store <slug> --name <change>
@@ -1065,9 +1066,31 @@ cmd_status() {
   done
 }
 
+# openspec: the OpenSpec CLI against the resolved root. External mode appends
+# --store <slug>. In local mode the root is the project checkout, but a
+# change's artifacts exist only on its branch, in the change worktree, so with
+# --name and a worktree holding openspec/ the CLI runs there, cwd-resolved —
+# the one place --store would miss them (external worktrees have no openspec/).
+cmd_openspec() {
+  local pre=() cli=()
+  while [ $# -gt 0 ]; do
+    case "$1" in --) shift; cli=("$@"); break ;; *) pre+=("$1"); shift ;; esac
+  done
+  parse_opts "${pre[@]}"
+  [ -n "$STORE" ] && [ ${#cli[@]} -gt 0 ] || usage
+  store_path "$STORE" >/dev/null || exit 1
+  local wt=""
+  [ -z "$NAME" ] || wt="$(workspace_path "$STORE" "$NAME")"
+  if [ -n "$wt" ] && [ -d "$wt/openspec" ]; then
+    cd "$wt" && exec openspec "${cli[@]}"
+  fi
+  exec openspec "${cli[@]}" --store "$STORE"
+}
+
 [ $# -ge 1 ] || usage
 if [ "$1" = "status" ]; then shift; cmd_status "$@"; exit $?; fi
 if [ "$1" = "next" ]; then shift; cmd_next "$@"; exit $?; fi
+if [ "$1" = "openspec" ]; then shift; cmd_openspec "$@"; exit $?; fi
 group="$1"; sub="${2:-}"; shift 2 2>/dev/null || shift $#
 case "$group $sub" in
   "slot acquire") cmd_slot_acquire "$@" ;;

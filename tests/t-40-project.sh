@@ -107,4 +107,16 @@ check "gate run timeout exits 124" test "$to_rc" -eq 124
 check_out "gate run names a timed-out gate" "gate timed out after 2s" printf '%s\n' "$to_out"
 check_fails "gate run timeout kills the gate's children" pgrep -f 'sleep [3]1337'
 
+# openspec wrapper: external mode appends --store; local mode runs the CLI in
+# the change worktree, where the branch's artifacts are
+mkdir -p "$TMP/fakeos"; printf '#!/bin/sh\nprintf "cwd=%%s args=%%s\\n" "$PWD" "$*"\n' > "$TMP/fakeos/openspec"; chmod +x "$TMP/fakeos/openspec"
+check_out "openspec wrapper: external mode appends --store" "args=validate feat-a --store teststore" env PATH="$TMP/fakeos:$PATH" $RC openspec --store teststore --name feat-a -- validate feat-a
+check_out "openspec wrapper: no --name uses the store form" "args=list --store teststore" env PATH="$TMP/fakeos:$PATH" $RC openspec --store teststore -- list
+$RC workspace create --store localstore --project "$PROJECT" --name feat-cli >/dev/null 2>&1
+mkdir -p "$PROJECT/.orchestration/workspaces/feat-cli/openspec"
+check_out "openspec wrapper: local mode runs in the change worktree" "cwd=$PROJECT/.orchestration/workspaces/feat-cli " env PATH="$TMP/fakeos:$PATH" $RC openspec --store localstore --name feat-cli -- validate feat-cli
+check_not "openspec wrapper: local mode passes no --store" "--store" env PATH="$TMP/fakeos:$PATH" $RC openspec --store localstore --name feat-cli -- validate feat-cli
+check_err "openspec wrapper: no CLI args is a usage error" "usage" $RC openspec --store teststore --name feat-a
+$RC workspace remove --store localstore --project "$PROJECT" --name feat-cli
+
 finish

@@ -294,7 +294,7 @@ append`, never edited after the fact.
       written (the human is choosing `light` or `full` on exactly that
       classification, and the critic has already checked it).
    2. In the same turn, offer to show the full proposal
-      (`openspec show <name> --store <slug>`) and ask whether to accept or
+      (`scripts/run-change openspec --store <slug> --name <name> -- show <name>`) and ask whether to accept or
       request changes. Showing the full proposal is not itself an answer —
       still get an accept-or-revise after it. For a proposal Propose
       classified as a fast-path fix, the choice gains a third option,
