@@ -27,4 +27,4 @@
 ## 5. Post-merge (manual)
 
 - [ ] 5.1 After merge, tag the `main` tip immediately before this PR merges (today `65043a9`) as `v2.1.0` and push the tag: `git tag v2.1.0 <sha> && git push origin v2.1.0`; confirm with `git rev-parse v2.1.0^{commit}`.
-- [ ] 5.2 After archive, `test ! -e openspec/specs/atlas-catalog-integration` passes; if archive leaves an empty spec, delete the directory in the archive commit.
+- [x] 5.2 After archive, `test ! -e openspec/specs/atlas-catalog-integration` passes; if archive leaves an empty spec, delete the directory in the archive commit.
