@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.3.0
+
+`tools/install.sh --tool agents` installs the skill alone into the shared `~/.agents/skills` directory (`<project>/.agents/skills` with `--project`) that every tool can point at, and `--tool <tool> --agents-only` adds that tool's agent definitions beside it without a second copy of the skill in the tool's own skills directory.
+
 ## 3.2.0
 
 `scripts/run-change openspec --store <slug> [--name <change>] -- <args>` runs the OpenSpec CLI against the resolved root in either mode: external mode appends `--store <slug>`; local mode, where a change's artifacts live only on its branch, runs the CLI from the change worktree, which `--store` could not see (`openspec validate --store` answered "Unknown item" there). SKILL.md and the proposer prompt route every CLI call through it.
