@@ -136,3 +136,14 @@ AUTONOMOUS-ORCHESTRATION.md's Phases step 3 **Critique** paragraph SHALL list th
 #### Scenario: Doc lists the inputs
 - **WHEN** `tests/run.sh` reads AUTONOMOUS-ORCHESTRATION.md from the line containing `**Critique**` to the line containing `The critic writes a **critique report**`
 - **THEN** that range contains `openspec/CONTEXT.md` and `openspec/adr/`
+
+### Requirement: OpenSpec CLI routed to the resolved root
+`scripts/run-change openspec --store <slug> [--name <change>] -- <args>` SHALL run the OpenSpec CLI against the resolved root in either mode: when the change worktree named by `--name` holds an `openspec/` directory (local mode, where a change's artifacts exist only on its branch) it SHALL run the CLI from that worktree without `--store`; otherwise it SHALL append `--store <slug>`. SKILL.md and the proposer prompt SHALL route every OpenSpec CLI call through it.
+
+#### Scenario: External mode appends the store
+- **WHEN** the store is an external root and `run-change openspec --store <slug> --name <change> -- validate <change>` runs
+- **THEN** the CLI receives `validate <change> --store <slug>`; the root is the store, independent of the working directory
+
+#### Scenario: Local mode runs in the change worktree
+- **WHEN** the store's `local_path` is the project and the change worktree contains `openspec/`
+- **THEN** the CLI runs with that worktree as its working directory and no `--store` flag; without `--name` the store form is used

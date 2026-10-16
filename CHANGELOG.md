@@ -1,5 +1,9 @@
 # Changelog
 
+## 3.2.0
+
+`scripts/run-change openspec --store <slug> [--name <change>] -- <args>` runs the OpenSpec CLI against the resolved root in either mode: external mode appends `--store <slug>`; local mode, where a change's artifacts live only on its branch, runs the CLI from the change worktree, which `--store` could not see (`openspec validate --store` answered "Unknown item" there). SKILL.md and the proposer prompt route every CLI call through it.
+
 ## 3.1.0
 
 A file-list entry ending in `/` names a directory and covers every path under it — in `units check` (seam coverage and the overlap rule) and in `unit merge`'s scope check — while counting as one entry toward the unit size cap, so a unit can own a generated tree such as `agents/` without listing every file. Without the slash an entry is a plain path, as before.

@@ -11,7 +11,7 @@ The request's implied baseline is part of the request: physical law and nature f
 Write the four artifacts: proposal.md, design.md, tasks.md, and one delta spec per capability.
 Every requirement has a scenario a programmatic check can encode; a manual task is a last resort.
 Record the file lists with `state set --store <slug> --name <change> seams "<seam>=<file>,<file>;<seam>=<file>"`.
-Pass `--store <slug>` on every OpenSpec CLI call; never run `openspec init`.
+Run every OpenSpec CLI call through `scripts/run-change openspec --store <slug> --name <change> -- <args>`, which routes it to the resolved root in either mode; never run `openspec init`.
 Read the Project glossary `<store>/openspec/CONTEXT.md` and the ADRs in `<store>/openspec/adr/` when present: use their canonical terms, name any ADR the proposal supersedes, and never edit either; only grill mode writes them.
 Run `openspec validate --strict` and fix every error before returning.
 Never lower your own scrutiny: the critic grades the draft, and you do not reclassify its findings.
