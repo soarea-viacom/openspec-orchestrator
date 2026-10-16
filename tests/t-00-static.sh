@@ -266,4 +266,29 @@ awk -v s="${crit_start:-0}" -v e="${crit_end:-0}" 'NR>=s && NR<=e' $SKILL/AUTONO
 check "AUTONOMOUS-ORCHESTRATION.md Critique input contract names openspec/CONTEXT.md" grep -qF -- "openspec/CONTEXT.md" "$crit_tmp"
 check "AUTONOMOUS-ORCHESTRATION.md Critique input contract names openspec/adr/" grep -qF -- "openspec/adr/" "$crit_tmp"
 
+check_out_empty() { # check_out_empty <desc> <cmd...> -- the command must print nothing
+  local desc="$1" out; shift
+  out="$("$@" 2>&1 || true)"
+  if [ -z "$out" ]; then echo "ok   $desc"; else echo "FAIL $desc"; printf '%s\n' "$out" | sed 's/^/     /'; fails=$((fails+1)); fi
+}
+check_out_empty "no Atlas mention outside the excluded history paths" \
+  git grep --untracked -n -i '[a]tlas' -- . ':!.orchestration' ':!.claude' ':!openspec/changes' \
+  ':!openspec/specs' ':!openspec/CONTEXT.md' ':!openspec/adr' ':!docs/research' ':!CHANGELOG.md'
+
+doc_files="README.md $SKILL/SKILL.md $SKILL/AUTONOMOUS-ORCHESTRATION.md $SKILL/CONTEXT.md"
+for f in $doc_files; do
+  check "$f names no Atlas" test "$({ grep -ci atlas "$f" || true; } | head -1)" = 0
+done
+for f in README.md $SKILL/SKILL.md $SKILL/AUTONOMOUS-ORCHESTRATION.md $SKILL/CONTEXT.md; do
+  check "$f has no -opencode suffix" test "$({ grep -cF -- '-opencode' "$f" || true; } | head -1)" = 0
+  check "$f has no legacy agents/openspec-<role>/" test "$({ grep -cF 'agents/openspec-<role>/' "$f" || true; } | head -1)" = 0
+done
+check "SKILL.md Step 0 names tools/install.sh --tool <tool>" grep -qF -- 'tools/install.sh --tool <tool>' $SKILL/SKILL.md
+check "README keeps model_reasoning_effort" grep -qF -- 'model_reasoning_effort' README.md
+check "README keeps the agent load-time note" grep -qF -- 'Agent definitions load when a session starts' README.md
+cfg_ctx="$(awk '/^context:/{f=1;next} f&&/^[a-zA-Z_]+:/{exit} f' openspec/config.yaml)"
+for w in 'CHANGELOG.md' 'agents/' 'exactly one'; do
+  check "config.yaml context contains $w" bash -c "printf '%s' \"\$1\" | grep -qF -- \"\$2\"" _ "$cfg_ctx" "$w"
+done
+
 finish
